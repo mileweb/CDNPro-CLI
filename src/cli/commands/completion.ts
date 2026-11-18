@@ -92,7 +92,7 @@ const SUB_SUBCMDS: Record<string, Record<string, string[]>> = {
     customer: ['list', 'get', 'create', 'update'],
     contact: ['list', 'get', 'create', 'update', 'delete'],
     'api-account': ['list', 'get', 'create', 'update', 'delete'],
-    apicall: ['list', 'get'],
+    apicall: ['list', 'counts', 'get'],
   },
 };
 
@@ -313,7 +313,7 @@ _cdnpro() {
         case "$sub" in
           customer)
             case "$subsub" in
-              list)         flags="--search --ids --status --products --regional-offices --sort-by --sort-order --limit --offset --all";;
+              list)         flags="--search --ids --status --products --check-history-product --regional-offices --sort-by --sort-order --limit --offset --all";;
               create|update) flags="--file --example";;
             esac;;
           contact)
@@ -329,6 +329,7 @@ _cdnpro() {
           apicall)
             case "$subsub" in
               list) flags="--from --to --method --path --safe --caller --for-customer --status --before --limit --all --report-range";;
+              counts) flags="--from --to --path --by-me-only";;
             esac;;
         esac;;
       schema) flags="--direction";;
@@ -388,7 +389,7 @@ _cdnpro() {
           customer)    COMPREPLY=($(compgen -W "list get create update" -- "$cur"));;
           contact)     COMPREPLY=($(compgen -W "list get create update delete" -- "$cur"));;
           api-account) COMPREPLY=($(compgen -W "list get create update delete" -- "$cur"));;
-          apicall)     COMPREPLY=($(compgen -W "list get" -- "$cur"));;
+          apicall)     COMPREPLY=($(compgen -W "list counts get" -- "$cur"));;
         esac;;
       schema)
         local ops=""
@@ -654,7 +655,7 @@ _cdnpro_admin() {
       customer)    local cmds=('list:List customers' 'get:Get a customer' 'create:Create a customer' 'update:Update a customer'); _describe 'subcommand' cmds;;
       contact)     local cmds=('list:List contacts' 'get:Get a contact' 'create:Create a contact' 'update:Update a contact' 'delete:Delete a contact'); _describe 'subcommand' cmds;;
       api-account) local cmds=('list:List API accounts' 'get:Get an API account' 'create:Create an API account' 'update:Update an API account' 'delete:Delete an API account'); _describe 'subcommand' cmds;;
-      apicall)     local cmds=('list:List API calls' 'get:Get an API call'); _describe 'subcommand' cmds;;
+      apicall)     local cmds=('list:List API calls' 'counts:Count API calls' 'get:Get an API call'); _describe 'subcommand' cmds;;
     esac
   fi
 }

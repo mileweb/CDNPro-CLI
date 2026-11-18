@@ -454,6 +454,7 @@ These commands require a reseller account.
 cdnpro admin customer list [--search <keyword>] [--ids <id,...>]
                            [--status <active|suspended>]
                            [--products <product,...>]
+                           [--check-history-product]
                            [--regional-offices <office,...>]
                            [--sort-by <field>] [--sort-order <asc|desc>]
                            [--limit <n>] [--offset <n>] [--all]
@@ -476,6 +477,8 @@ cdnpro admin apicall list [--from <date>] [--to <date>]
                           [--for-customer <id|none|any>]
                           [--status <code,...>] [--before <apiRequestId>]
                           [--limit <n>] [--report-range <scope>] [--all]
+cdnpro admin apicall counts [--from <date>] [--to <date>]
+                            [--path <prefix>] [--by-me-only]
 cdnpro admin apicall get
 ```
 
