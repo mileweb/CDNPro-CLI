@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import { CliError } from './errors';
-import { ValidationResult } from '../schema/validate';
+import { OptionMapping, flagForBodyPath } from './option-map';
+import { validateBody, ValidationResult } from '../schema/validate';
 
 /**
  * Read a JSON body from a file path or stdin ("-").
@@ -33,11 +34,14 @@ export function readBodyFile(filePath: string): unknown {
  * @param result   - The ValidationResult from validateBody()
  * @param hint     - The full `cdnpro <resource> <operation> --example` command string for the hint message
  * @param output   - The --output flag value (undefined = auto-detect from isTTY)
+ * @param mappings - Optional option mappings; used to annotate errors with the CLI flag that
+ *                   populates the failing body path (e.g. --hostname)
  */
 export function emitValidationError(
   result: ValidationResult,
   hint: string,
   output?: string,
+  mappings?: OptionMapping[],
 ): never {
   const errors = result.errors;
   const isHuman = output == null ? process.stdout.isTTY : output === 'table';
@@ -45,7 +49,10 @@ export function emitValidationError(
   if (isHuman) {
     process.stderr.write('Error: Invalid request body\n');
     for (const e of errors) {
-      process.stderr.write(`  - ${e.instancePath || 'body'}: ${e.message}\n`);
+      const flag = flagForBodyPath(e.instancePath || '', mappings);
+      process.stderr.write(
+        `  - ${e.instancePath || 'body'}: ${e.message}${flag ? ` (flag ${flag})` : ''}\n`,
+      );
     }
     process.stderr.write(`\nTip: run \`${hint}\` for a valid template\n`);
   } else {
@@ -54,12 +61,16 @@ export function emitValidationError(
       error: {
         code: 'VALIDATION',
         message: `Request body failed schema validation (${count} error${count !== 1 ? 's' : ''})`,
-        validationErrors: errors.map(e => ({
-          path: e.instancePath || '',
-          message: e.message ?? '',
-          keyword: e.keyword,
-          params: e.params,
-        })),
+        validationErrors: errors.map(e => {
+          const cliFlag = flagForBodyPath(e.instancePath || '', mappings);
+          return {
+            path: e.instancePath || '',
+            message: e.message ?? '',
+            keyword: e.keyword,
+            params: e.params,
+            ...(cliFlag ? { cliFlag } : {}),
+          };
+        }),
         schema: result.schema,
         hint: `Run \`${hint}\` to see a valid body template`,
       },
@@ -68,6 +79,26 @@ export function emitValidationError(
   }
 
   throw new CliError('VALIDATION', 'Invalid request body', undefined, true);
+}
+
+/**
+ * Validate a request body that the CLI is about to send. Skips validation when
+ * there is no body (e.g. a report request with no filters).
+ *
+ * This is the single path used by both `--file` bodies and bodies assembled
+ * from individual flags.
+ */
+export function validateRequestOrThrow(
+  openapiPath: string,
+  method: string,
+  body: unknown,
+  hint: string,
+  output?: string,
+  mappings?: OptionMapping[],
+): void {
+  if (body === undefined || body === null) return;
+  const result = validateBody(openapiPath, method, body);
+  if (!result.valid) emitValidationError(result, hint, output, mappings);
 }
 
 /**
@@ -83,6 +114,17 @@ export function checkRequiredOption(
   if (!value) {
     throw new CliError('VALIDATION', `Required option ${flagName} not specified`);
   }
+}
+
+/**
+ * Parse an integer-valued flag. Rejects non-integer input with exit code 4.
+ */
+export function parseIntegerOption(value: string, flagName: string): number {
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed)) {
+    throw new CliError('VALIDATION', `${flagName} must be an integer, got: ${value}`);
+  }
+  return parsed;
 }
 
 /**

@@ -92,8 +92,9 @@ Saved profiles are not used when explicit credentials are supplied. That is `--h
 Credentials are stored securely:
 - **Secret key** — stored in the OS keychain (macOS Keychain, Windows Credential Manager, Linux Secret Service). If the keychain is unavailable (headless server, CI), a one-time warning is shown and the secret falls back to the config file.
 - **Host and username** — stored in the config file:
-  - Linux/macOS: `~/.config/cdnpro/config.json`
-  - Windows: `%APPDATA%\cdnpro\config.json`
+  - Linux: `~/.config/cdnpro-nodejs/config.json`
+  - macOS: `~/Library/Preferences/cdnpro-nodejs/config.json`
+  - Windows: `%APPDATA%\cdnpro-nodejs\Config\config.json`
 
 ## Global Options
 
@@ -153,7 +154,7 @@ cdnpro cert list [--search <keyword>] [--target <all|staging|production>]
                  [--sort-order <asc|desc>] [--limit <n>] [--offset <n>]
                  [--report-range <scope>] [--all]
 cdnpro cert get <id>
-cdnpro cert create [--name <name>] [--file <path>] [--example]
+cdnpro cert create --name <name> [--file <path>] [--example]
                    # Upload mode:
                    --cert <file> --key <file> [--ca <file>] [--comments <text>]
                    # Self-signed mode:
@@ -171,6 +172,9 @@ cdnpro cert download-csr <id> [--dcv <provider>] [--out <file>]
 ```
 
 `cert create` and `cert update` support three mutually exclusive creation modes plus `--file`:
+
+`cert create` requires `--name` for every flag-built mode (upload, self-signed, CA-only). When
+`--file` supplies the full body, the name comes from the file and the flag is not required.
 
 | Mode | Trigger flags | Description |
 |---|---|---|
@@ -203,7 +207,7 @@ cdnpro cert download-csr <id> [--dcv <provider>] [--out <file>]
 | `--email <email>` | Email address |
 | `--comments <text>` | Version comments |
 
-Both commands also accept `--name <name>` to set a friendly name for the certificate record.
+Both commands also accept `--name <name>` (required for `cert create` unless `--file` is used, optional for `cert update`) to set the certificate record's name.
 
 #### Certificate versions
 
@@ -392,7 +396,8 @@ cdnpro log-aggregation-point get|create|update|delete|summary
 
 ```bash
 cdnpro annotation list [--from <date>] [--to <date>] [--type <client|configuration|operation>]
-                       [--search <keyword>] [--limit <n>] [--offset <n>] [--all]
+                       [--search <keyword>] [--limit <n>] [--offset <n>]
+                       [--report-range <scope>] [--all]
 cdnpro annotation get|create|update|delete
 ```
 

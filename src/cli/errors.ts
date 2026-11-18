@@ -31,6 +31,7 @@ export class CliError extends Error {
 
 interface ApiErrorLike extends Error {
   body?: unknown;
+  code?: string;
   ctx?: {
     _res?: { statusCode?: number };
   };
@@ -93,6 +94,17 @@ export function handleError(err: unknown): never {
       printError({ code: err.code, message: err.message, details: err.details });
     }
     process.exit(EXIT_CODES[err.code]);
+  }
+
+  // Socket-level timeouts (including our own 30s request timeout) have no
+  // HTTP status, so map them before the status-based mapping below.
+  const errno = (err as { code?: unknown }).code;
+  if (errno === 'ETIMEDOUT' || errno === 'ESOCKETTIMEDOUT') {
+    printError({
+      code: 'TIMEOUT',
+      message: err instanceof Error ? err.message : String(err),
+    });
+    process.exit(EXIT_CODES.TIMEOUT);
   }
 
   if (isApiError(err)) {

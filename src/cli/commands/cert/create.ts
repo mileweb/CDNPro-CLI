@@ -6,9 +6,8 @@ import { CDNProClient } from '../../../client/CDNProClient';
 import { printCreateSuccess } from '../../output';
 import { handleError } from '../../errors';
 import { CliError } from '../../errors';
-import { readBodyFile, emitValidationError, enrichWithLocationId } from '../../util';
-import { getNamedSpecExample } from '../../../schema/loader';
-import { validateBody } from '../../../schema/validate';
+import { readBodyFile, enrichWithLocationId, validateRequestOrThrow } from '../../util';
+import { getCertExample } from './example';
 import {
   OptionMapping,
   FILE_EXAMPLE,
@@ -17,7 +16,7 @@ import {
 } from '../../option-map';
 
 export const CERT_CREATE_OPTIONS: OptionMapping[] = [
-  { flag: '--name <name>',       target: 'body', param: 'name',                        description: 'Friendly name for the certificate record' },
+  { flag: '--name <name>',       target: 'body', param: 'name',                        description: 'Certificate name (required unless --file is used)' },
   // Upload mode
   { flag: '--cert <file>',       target: 'body', param: 'newVersion.certificate',       description: 'PEM certificate file (upload mode)' },
   { flag: '--key <file>',        target: 'body', param: 'newVersion.privateKey',        description: 'PEM private key file (upload mode)' },
@@ -103,53 +102,54 @@ export function registerCertCreateCommand(parent: Command): void {
       const isFile = !!opts.file;
 
       if (opts.example) {
-        let exampleName: string;
-        if (isSelfSigned && opts.selfSigned?.toUpperCase() === 'ECC256') {
-          exampleName = 'Example of generating a self-signed ECC256 certificate';
-        } else if (isSelfSigned) {
-          exampleName = 'Example of generating a self-signed RSA2048 certificate';
-        } else {
-          exampleName = 'Example of uploading a certificate';
-        }
-        const example = getNamedSpecExample('/cdn/certificates', 'post', exampleName);
+        const mode = isSelfSigned
+          ? { kind: 'self-signed' as const, alg: opts.selfSigned! }
+          : isCaOnly
+            ? { kind: 'ca-only' as const }
+            : { kind: 'upload' as const };
+        const example = getCertExample('/cdn/certificates', 'post', mode);
         process.stdout.write(JSON.stringify(example, null, 2) + '\n');
         return;
       }
 
       const modeCount = [isUpload, isSelfSigned, isCaOnly, isFile].filter(Boolean).length;
       if (modeCount === 0) {
-        process.stderr.write(
-          'Error: one of --cert/--key (upload), --self-signed (generated), --ca-only (CA chain), or --file (full body) is required\n',
+        throw new CliError(
+          'VALIDATION',
+          'One of --cert/--key (upload), --self-signed (generated), --ca-only (CA chain), or --file (full body) is required',
         );
-        process.exit(1);
       }
       if (modeCount > 1) {
-        process.stderr.write('Error: --cert/--key, --self-signed, --ca-only, and --file are mutually exclusive\n');
-        process.exit(1);
+        throw new CliError(
+          'VALIDATION',
+          '--cert/--key, --self-signed, --ca-only, and --file are mutually exclusive',
+        );
       }
 
       const globals = cmdObj.optsWithGlobals<GlobalOptions>();
-      const serverInfo = await resolveCredentials(globals);
-      const client = new CDNProClient(serverInfo);
 
-      let body: unknown;
+      // --name is required for every flag-built mode; --file supplies its own body.
+      if (!isFile && !opts.name) {
+        throw new CliError('VALIDATION', '--name <name> is required unless --file is used');
+      }
+
+      let body: Record<string, unknown>;
+      let uploadKeyPem: string | undefined;
 
       if (isFile) {
-        body = readBodyFile(opts.file!);
-        const validation = validateBody('/cdn/certificates', 'post', body);
-        if (!validation.valid) emitValidationError(validation, 'cdnpro cert create --example', globals.output);
+        body = readBodyFile(opts.file!) as Record<string, unknown>;
       } else if (isUpload) {
         if (!opts.cert) throw new CliError('VALIDATION', '--cert <file> is required in upload mode');
         if (!opts.key) throw new CliError('VALIDATION', '--key <file> is required in upload mode');
 
-        const dateStr = new Date().toUTCString();
         const certPem = readPemFile(opts.cert, 'certificate');
-        const keyPem = readPemFile(opts.key, 'private key');
-        const encryptedKey = encryptPrivateKey(keyPem, serverInfo.secretKey, dateStr);
+        uploadKeyPem = readPemFile(opts.key, 'private key');
 
         const newVersion: Record<string, unknown> = {
           certificate: certPem,
-          privateKey: encryptedKey,
+          // Placeholder: validation only needs a string. The real key is
+          // encrypted after credentials are resolved.
+          privateKey: uploadKeyPem,
         };
         if (opts.ca) newVersion['chainCert'] = readPemFile(opts.ca, 'CA chain');
         if (opts.comments) newVersion['comments'] = opts.comments;
@@ -158,19 +158,6 @@ export function registerCertCreateCommand(parent: Command): void {
           ...(opts.name ? { name: opts.name } : {}),
           newVersion,
         };
-
-        const reqOptions = {
-          ...(globals.onBehalfOf ? { onBehalfOf: globals.onBehalfOf } : {}),
-          ...(globals.verbose ? { verbose: globals.verbose } : {}),
-          dateOverride: dateStr,
-        };
-
-        const raw = await client.certificates.create(body, { ...reqOptions, raw: true, dateOverride: dateStr }) as { obj: Record<string, unknown>; ctx: { _res: { headers: Record<string, string | string[] | undefined> } } };
-        const data = enrichWithLocationId(raw);
-        const id = data['id'] as string;
-
-        printCreateSuccess('Certificate', 'certificateId', id, globals.output);
-        return;
       } else if (isSelfSigned) {
         const alg = opts.selfSigned!.toUpperCase();
         if (alg !== 'RSA2048' && alg !== 'ECC256') {
@@ -209,6 +196,41 @@ export function registerCertCreateCommand(parent: Command): void {
           ...(opts.name ? { name: opts.name } : {}),
           newVersion: { chainCert: caPem },
         };
+      }
+
+      validateRequestOrThrow(
+        '/cdn/certificates',
+        'post',
+        body,
+        'cdnpro cert create --example',
+        globals.output,
+        CERT_CREATE_OPTIONS,
+      );
+
+      const serverInfo = await resolveCredentials(globals);
+      const client = new CDNProClient(serverInfo);
+
+      if (isUpload) {
+        const dateStr = new Date().toUTCString();
+        const newVersion = body['newVersion'] as Record<string, unknown>;
+        newVersion['privateKey'] = encryptPrivateKey(
+          uploadKeyPem as string,
+          serverInfo.secretKey,
+          dateStr,
+        );
+
+        const reqOptions = {
+          ...(globals.onBehalfOf ? { onBehalfOf: globals.onBehalfOf } : {}),
+          ...(globals.verbose ? { verbose: globals.verbose } : {}),
+          dateOverride: dateStr,
+        };
+
+        const raw = await client.certificates.create(body, { ...reqOptions, raw: true, dateOverride: dateStr }) as { obj: Record<string, unknown>; ctx: { _res: { headers: Record<string, string | string[] | undefined> } } };
+        const data = enrichWithLocationId(raw);
+        const id = data['id'] as string;
+
+        printCreateSuccess('Certificate', 'certificateId', id, globals.output);
+        return;
       }
 
       const reqOptions = {

@@ -77,6 +77,31 @@ export function flagToCliFlag(flag: string): string {
   return m ? m[1] : flag;
 }
 
+/**
+ * Map an AJV instance path (e.g. "/filters/hostnames/0") to the CLI flag that
+ * populates it (e.g. "--hostname"). Numeric array indices are ignored.
+ * Only exact mapping matches are returned: ambiguous paths such as
+ * "/actions/0/version" (which several action flags can produce) stay unmapped
+ * rather than pointing at the wrong flag.
+ */
+export function flagForBodyPath(
+  instancePath: string,
+  mappings: OptionMapping[] | undefined,
+): string | undefined {
+  if (!mappings || !instancePath) return undefined;
+  const normalized = instancePath
+    .split('/')
+    .filter(Boolean)
+    .filter((segment) => !/^\d+$/.test(segment))
+    .join('.');
+  const matches = mappings.filter(
+    (m) => m.target === 'body' && m.param === normalized,
+  );
+  // Several flags can feed the same body property (e.g. all deploy action
+  // flags feed `actions`); do not guess in that case.
+  return matches.length === 1 ? flagToCliFlag(matches[0].flag) : undefined;
+}
+
 /** Derive Commander attribute name from a flag: '--sort-by' → 'sortBy'. */
 export function flagToAttr(flag: string): string {
   const m = flag.match(/--([\w-]+)/);
@@ -116,6 +141,8 @@ export function buildRequestFromMapping(
     const attr = flagToAttr(m.flag);
     const val = opts[attr];
     if (val === undefined || val === null || val === '') continue;
+    // Repeatable options default to [] in Commander; omit them when unused.
+    if (Array.isArray(val) && val.length === 0) continue;
 
     // Boolean flags are set to true by Commander; convert to string for query params
     const value = (m.boolean && m.target === 'query') ? String(val) : val;
@@ -145,7 +172,11 @@ export function checkRequiredMappings(
   for (const m of mappings) {
     if (!m.required) continue;
     const attr = flagToAttr(m.flag);
-    if (opts[attr] === undefined || opts[attr] === null || opts[attr] === '') {
+    const val = opts[attr];
+    if (val === undefined || val === null || val === '') {
+      throw new CliError('VALIDATION', `Required option ${flagToCliFlag(m.flag)} not specified`);
+    }
+    if (Array.isArray(val) && val.length === 0) {
       throw new CliError('VALIDATION', `Required option ${flagToCliFlag(m.flag)} not specified`);
     }
   }

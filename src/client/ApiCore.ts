@@ -51,6 +51,7 @@ export interface RawResponse<T = unknown> {
 
 interface ApiError extends Error {
   body?: unknown;
+  code?: string;
   ctx?: ResponseContext;
 }
 
@@ -317,8 +318,10 @@ export class ApiCore {
 
       request.setTimeout(30000, () => {
         const err: ApiError = new Error('Request timed out after 30 seconds.');
+        err.code = 'ETIMEDOUT';
         err.ctx = ctx as ResponseContext;
         reject(err);
+        request.destroy();
       });
 
       if (body !== undefined && body !== null) request.write(body);

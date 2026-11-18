@@ -3,7 +3,7 @@ import { resolveCredentials, GlobalOptions } from '../../config';
 import { CDNProClient } from '../../../client/CDNProClient';
 import { printResult, OutputFormat } from '../../output';
 import { handleError } from '../../errors';
-import { readBodyFile, checkRequiredOption } from '../../util';
+import { readBodyFile, checkRequiredOption, validateRequestOrThrow } from '../../util';
 import { getExampleBody } from '../../../schema/synthesize';
 import { registerTimeSeriesReportCommand } from './time-series';
 import { registerSummaryReportCommand } from './summary';
@@ -89,21 +89,35 @@ export function registerReportCommands(parent: Command): void {
       checkRequiredOption(opts.to, '--to <date>');
 
       const globals = cmdObj.optsWithGlobals<GlobalOptions>();
-      const serverInfo = await resolveCredentials(globals);
-      const client = new CDNProClient(serverInfo);
-      const fmt = globals.output as OutputFormat | undefined;
+
+      // --from/--to are query parameters and must be sent even when --file
+      // supplies the request body. --file only replaces the body.
+      const query: Record<string, unknown> = {
+        startdate: opts.from,
+        enddate: opts.to,
+      };
 
       let body: unknown;
-      const query: Record<string, unknown> = {};
       if (opts.file) {
         body = readBodyFile(opts.file);
       } else {
-        query.startdate = opts.from;
-        query.enddate = opts.to;
         const filters: Record<string, unknown> = {};
         if ((opts.hostname ?? []).length > 0) filters['hostnames'] = opts.hostname;
         body = Object.keys(filters).length > 0 ? { filters } : undefined;
       }
+
+      validateRequestOrThrow(
+        '/cdn/report/logDownload',
+        'post',
+        body,
+        'cdnpro report logs --example',
+        globals.output,
+        REPORT_LOGS_OPTIONS,
+      );
+
+      const serverInfo = await resolveCredentials(globals);
+      const client = new CDNProClient(serverInfo);
+      const fmt = globals.output as OutputFormat | undefined;
 
       const reqOptions = {
         ...(globals.onBehalfOf ? { onBehalfOf: globals.onBehalfOf } : {}),

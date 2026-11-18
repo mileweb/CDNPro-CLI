@@ -11,7 +11,9 @@ let _ajv: Ajv | null = null;
 
 function getAjv(): Ajv {
   if (!_ajv) {
-    _ajv = new Ajv({ allErrors: true, strict: false });
+    // coerceTypes lets flag-built bodies (which are always strings) satisfy
+    // numeric/boolean schema types, e.g. --property-version "3" → 3.
+    _ajv = new Ajv({ allErrors: true, strict: false, coerceTypes: true });
   }
   return _ajv;
 }

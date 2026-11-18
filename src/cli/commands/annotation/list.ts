@@ -5,7 +5,7 @@ import { printJson, printTable, printJsonl, buildMeta, OutputFormat } from '../.
 import { handleError, CliError } from '../../errors';
 import {
   OptionMapping,
-  PAGINATION_OPTIONS,
+  REPORT_RANGE,
   ALL,
   registerOptionsFromMapping,
   buildRequestFromMapping,
@@ -13,11 +13,15 @@ import {
 } from '../../option-map';
 
 export const ANNOTATION_LIST_OPTIONS: OptionMapping[] = [
-  { flag: '--from <date>',  target: 'body', param: 'startDate', description: 'Start date (RFC 3339 UTC)' },
-  { flag: '--to <date>',    target: 'body', param: 'endDate',   description: 'End date (RFC 3339 UTC)' },
-  { flag: '--type <type>',  target: 'body', param: 'type',      description: 'Filter by type: client | configuration | operation' },
-  { flag: '--search <term>', target: 'body', param: 'search',   description: 'Filter by ID or comment text' },
-  ...PAGINATION_OPTIONS,
+  // This endpoint takes its filters and pagination as query parameters
+  // (POST /cdn/annotationsList with an optional filters body).
+  { flag: '--from <date>',   target: 'query', param: 'startdate', description: 'Start date (RFC 3339 UTC)' },
+  { flag: '--to <date>',     target: 'query', param: 'enddate',   description: 'End date (RFC 3339 UTC)' },
+  { flag: '--type <type>',   target: 'query', param: 'type',      description: 'Filter by type: client | configuration | operation' },
+  { flag: '--search <term>', target: 'query', param: 'search',    description: 'Filter by ID or comment text' },
+  { flag: '--limit <n>',     target: 'query', param: 'limit',     description: 'Page size' },
+  { flag: '--offset <n>',    target: 'query', param: 'offset',    description: 'Page offset' },
+  REPORT_RANGE,
   ALL,
 ];
 
@@ -32,19 +36,32 @@ export function registerAnnotationListCommand(parent: Command): void {
   cmd.action(async (opts: Record<string, unknown>, cmdObj: Command) => {
     try {
       const globals = cmdObj.optsWithGlobals<GlobalOptions>();
+
+      const { query, reqOptions } = buildRequestFromMapping(opts, ANNOTATION_LIST_OPTIONS);
+
+      const limit = opts.all
+        ? 100
+        : parseInt(String(opts.limit ?? '10'), 10);
+      if (!opts.all && (isNaN(limit) || limit < 1)) {
+        throw new CliError('VALIDATION', `--limit must be a positive integer, got: ${opts.limit}`);
+      }
+      const startOffset = opts.all
+        ? 0
+        : parseInt(String(opts.offset ?? '0'), 10);
+      if (!opts.all && (isNaN(startOffset) || startOffset < 0)) {
+        throw new CliError('VALIDATION', `--offset must be a non-negative integer, got: ${opts.offset}`);
+      }
+
       const serverInfo = await resolveCredentials(globals);
       const client = new CDNProClient(serverInfo);
       const fmt = globals.output as OutputFormat | undefined;
 
-      const { query, body, reqOptions } = buildRequestFromMapping(opts, ANNOTATION_LIST_OPTIONS);
-
       if (opts.all) {
-        const limit = 100;
-        let offset = 0;
+        let offset = startOffset;
         while (true) {
           const data = await client.annotations.list(
-            { ...(body ?? {}), ...query, limit, offset },
-            reqOptions,
+            {},
+            { ...reqOptions, query: { ...query, limit, offset } },
           );
           const { items } = buildMeta(data);
           if (items.length === 0) break;
@@ -55,21 +72,13 @@ export function registerAnnotationListCommand(parent: Command): void {
         return;
       }
 
-      const limit = parseInt(String(opts.limit ?? '10'), 10);
-      if (isNaN(limit) || limit < 1) {
-        throw new CliError('VALIDATION', `--limit must be a positive integer, got: ${opts.limit}`);
-      }
-      const offset = parseInt(String(opts.offset ?? '0'), 10);
-      if (isNaN(offset) || offset < 0) {
-        throw new CliError('VALIDATION', `--offset must be a non-negative integer, got: ${opts.offset}`);
-      }
       const data = await client.annotations.list(
-        { ...(body ?? {}), ...query, limit, offset },
-        reqOptions,
+        {},
+        { ...reqOptions, query: { ...query, limit, offset: startOffset } },
       );
       const { items, meta } = buildMeta(data);
       meta.limit = limit;
-      meta.offset = offset;
+      meta.offset = startOffset;
 
       const effectiveFmt = fmt ?? (process.stdout.isTTY ? 'table' : 'json');
       if (effectiveFmt === 'table') {

@@ -4,10 +4,9 @@ import { CDNProClient } from '../../../client/CDNProClient';
 import { printCreateSuccess, OutputFormat } from '../../output';
 import { handleError } from '../../errors';
 import { CliError } from '../../errors';
-import { readBodyFile, emitValidationError, enrichWithLocationId } from "../../util";
+import { readBodyFile, enrichWithLocationId, validateRequestOrThrow } from "../../util";
 import { waitForTask } from '../../wait';
 import { getExampleBody } from '../../../schema/synthesize';
-import { validateBody } from '../../../schema/validate';
 import {
   OptionMapping,
   FILE_EXAMPLE,
@@ -57,16 +56,12 @@ export function registerPrefetchCreateCommand(parent: Command): void {
       }
 
       const globals = cmdObj.optsWithGlobals<GlobalOptions>();
-      const serverInfo = await resolveCredentials(globals);
-      const client = new CDNProClient(serverInfo);
       const fmt = globals.output as OutputFormat | undefined;
 
       let body: unknown;
 
       if (opts.file) {
         body = readBodyFile(opts.file);
-        const validation = validateBody('/cdn/prefetches', 'post', body);
-        if (!validation.valid) emitValidationError(validation, 'cdnpro prefetch create --example', globals.output);
       } else {
         const urls = opts.url ?? [];
         if (urls.length === 0) {
@@ -74,6 +69,21 @@ export function registerPrefetchCreateCommand(parent: Command): void {
             'VALIDATION',
             'At least one --url is required (or use --file)',
           );
+        }
+
+        for (const url of urls) {
+          if (!/^https?:\/\//i.test(url)) {
+            throw new CliError(
+              'VALIDATION',
+              `--url "${url}" must begin with http:// or https://`,
+            );
+          }
+          if (url.length > 2048) {
+            throw new CliError(
+              'VALIDATION',
+              `--url must be at most 2048 characters, got ${url.length}`,
+            );
+          }
         }
 
         const prefetchBody: Record<string, unknown> = {
@@ -87,6 +97,18 @@ export function registerPrefetchCreateCommand(parent: Command): void {
 
         body = prefetchBody;
       }
+
+      validateRequestOrThrow(
+        '/cdn/prefetches',
+        'post',
+        body,
+        'cdnpro prefetch create --example',
+        globals.output,
+        PREFETCH_CREATE_OPTIONS,
+      );
+
+      const serverInfo = await resolveCredentials(globals);
+      const client = new CDNProClient(serverInfo);
 
       const reqOptions = {
         ...(globals.onBehalfOf ? { onBehalfOf: globals.onBehalfOf } : {}),

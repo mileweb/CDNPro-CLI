@@ -4,10 +4,9 @@ import { CDNProClient } from '../../../client/CDNProClient';
 import { printCreateSuccess, OutputFormat } from '../../output';
 import { handleError } from '../../errors';
 import { CliError } from '../../errors';
-import { readBodyFile, emitValidationError, enrichWithLocationId, checkRequiredOption } from '../../util';
+import { readBodyFile, enrichWithLocationId, checkRequiredOption, validateRequestOrThrow } from '../../util';
 import { waitForTask } from '../../wait';
 import { getNamedSpecExample } from '../../../schema/loader';
-import { validateBody } from '../../../schema/validate';
 import {
   OptionMapping,
   FILE_EXAMPLE,
@@ -24,7 +23,7 @@ export const DEPLOY_CREATE_OPTIONS: OptionMapping[] = [
   { flag: '--remove-cert <id>',          target: 'body',   param: 'actions',        description: 'Remove a certificate from the target environment; repeatable', repeatable: true },
   // Metadata
   { flag: '--name <name>',               target: 'body',   param: 'name',            description: 'Friendly name for the deployment task' },
-  { flag: '--webhook <id>',              target: 'body',   param: 'webhookId',       description: 'Webhook ID to call on task completion' },
+  { flag: '--webhook <id>',              target: 'body',   param: 'webhook',         description: 'Webhook ID to call on task completion' },
   // Bypass headers
   { flag: '--skip-certificate-check',            target: 'header', param: 'Check-Certificate',            description: 'Skip certificate validity and SAN checks', boolean: true },
   { flag: '--skip-client-ca-certificate-check',  target: 'header', param: 'Check-Client-CA-Certificate',  description: 'Skip client CA certificate expiry check', boolean: true },
@@ -88,16 +87,12 @@ export function registerDeployCreateCommand(parent: Command): void {
       }
 
       const globals = cmdObj.optsWithGlobals<GlobalOptions>();
-      const serverInfo = await resolveCredentials(globals);
-      const client = new CDNProClient(serverInfo);
       const fmt = globals.output as OutputFormat | undefined;
 
       let body: unknown;
 
       if (opts.file) {
         body = readBodyFile(opts.file);
-        const validation = validateBody('/cdn/deploymentTasks', 'post', body);
-        if (!validation.valid) emitValidationError(validation, 'cdnpro deploy create --example', globals.output);
       } else {
         checkRequiredOption(opts.target, '--target <env>');
 
@@ -136,9 +131,21 @@ export function registerDeployCreateCommand(parent: Command): void {
           actions,
         };
         if (opts.name) taskBody['name'] = opts.name;
-        if (opts.webhook) taskBody['webhookId'] = opts.webhook;
+        if (opts.webhook) taskBody['webhook'] = opts.webhook;
         body = taskBody;
       }
+
+      validateRequestOrThrow(
+        '/cdn/deploymentTasks',
+        'post',
+        body,
+        'cdnpro deploy create --example',
+        globals.output,
+        DEPLOY_CREATE_OPTIONS,
+      );
+
+      const serverInfo = await resolveCredentials(globals);
+      const client = new CDNProClient(serverInfo);
 
       const bypassHeaders: Record<string, string> = {};
       if (opts.skipCertificateCheck) bypassHeaders['Check-Certificate'] = 'no';
