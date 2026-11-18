@@ -5,17 +5,18 @@ import { listProfiles } from '../config';
 // ─── Static command tree ────────────────────────────────────────────────────
 
 const TOP_CMDS: string[] = [
-  'auth', 'property', 'cert', 'cert-version', 'deploy', 'validation',
+  'auth', 'property', 'property-version', 'cert', 'cert-version', 'deploy', 'validation',
   'edge-hostname', 'purge', 'prefetch', 'report', 'log-config',
-  'log-aggregation-point', 'annotation', 'hostname', 'webhook',
+  'log-aggregation-point', 'annotation', 'hostname', 'hostname-history', 'webhook',
   'secret', 'service-quota', 'api-permission', 'shield', 'isp',
   'client-region', 'staging-server', 'public-ip', 'origin-fast-route-ip',
-  'ip-details', 'system-config', 'admin', 'schema', 'completion',
+  'ip-details', 'system-config', 'admin', 'schema', 'completion', 'update',
 ];
 
 const TOP_CMD_DESCRIPTIONS: Record<string, string> = {
   auth: 'Manage credential profiles',
   property: 'Manage CDN properties',
+  'property-version': 'Manage property versions',
   cert: 'Manage TLS certificates',
   'cert-version': 'Manage certificate versions',
   deploy: 'Manage deployment tasks',
@@ -27,7 +28,8 @@ const TOP_CMD_DESCRIPTIONS: Record<string, string> = {
   'log-config': 'Manage log configurations',
   'log-aggregation-point': 'Manage log aggregation points',
   annotation: 'Manage annotations',
-  hostname: 'Look up hostnames and history',
+  hostname: 'Look up hostnames',
+  'hostname-history': 'Look up hostname history',
   webhook: 'Manage webhooks',
   secret: 'Manage secrets',
   'service-quota': 'Manage service quotas',
@@ -43,11 +45,13 @@ const TOP_CMD_DESCRIPTIONS: Record<string, string> = {
   admin: 'Admin operations (resellers only)',
   schema: 'Inspect OpenAPI schema for any operation',
   completion: 'Print shell completion script',
+  update: 'Update cdnpro-cli to the latest version',
 };
 
 const SUBCMDS: Record<string, string[]> = {
   auth: ['login', 'logout', 'list', 'switch', 'status'],
-  property: ['list', 'get', 'create', 'update', 'delete', 'version'],
+  property: ['list', 'get', 'create', 'update', 'delete'],
+  'property-version': ['list', 'get', 'create', 'update', 'delete'],
   cert: ['list', 'get', 'create', 'update', 'delete', 'download-csr'],
   'cert-version': ['get', 'delete'],
   deploy: ['list', 'get', 'create'],
@@ -67,7 +71,8 @@ const SUBCMDS: Record<string, string[]> = {
   'log-config': ['list', 'get', 'create', 'update', 'delete'],
   'log-aggregation-point': ['list', 'get', 'create', 'update', 'delete', 'summary'],
   annotation: ['list', 'get', 'create', 'update', 'delete'],
-  hostname: ['list', 'get', 'history'],
+  hostname: ['list', 'get'],
+  'hostname-history': ['list', 'get'],
   webhook: ['list', 'get', 'create', 'update', 'delete'],
   secret: ['list', 'get', 'create', 'update', 'delete'],
   'service-quota': ['list', 'get', 'update'],
@@ -86,8 +91,6 @@ const SUBCMDS: Record<string, string[]> = {
 
 // Level 3: subcommands of subcommands
 const SUB_SUBCMDS: Record<string, Record<string, string[]>> = {
-  property: { version: ['list', 'get', 'create', 'update', 'delete'] },
-  hostname: { history: ['list', 'get'] },
   admin: {
     customer: ['list', 'get', 'create', 'update'],
     contact: ['list', 'get', 'create', 'update', 'delete'],
@@ -208,12 +211,12 @@ _cdnpro() {
           create)  flags="--file --example";;
           update)  flags="--file --example --if-unmodified-since";;
           delete)  flags="--confirm";;
-          version)
-            case "$subsub" in
-              list)   flags="--search --sort-by --sort-order --limit --offset --all";;
-              create) flags="--file --example";;
-              update) flags="--file --example --if-unmodified-since";;
-            esac;;
+        esac;;
+      property-version)
+        case "$sub" in
+          list)   flags="--search --sort-by --sort-order --limit --offset --all";;
+          create) flags="--file --example";;
+          update) flags="--file --example --if-unmodified-since";;
         esac;;
       cert)
         case "$sub" in
@@ -272,14 +275,18 @@ _cdnpro() {
         esac;;
       annotation)
         case "$sub" in
-          list)   flags="--from --to --type --search --limit --offset --all";;
+          list)   flags="--from --to --type --search --limit --offset --all --report-range";;
           create) flags="--file --example";;
-          update) flags="--file";;
+          update) flags="--file --example";;
         esac;;
       hostname)
         case "$sub" in
           list)    flags="--search --target --limit --offset --all --report-range";;
-          history) flags="--from --to --search --target --limit --offset --all --report-range";;
+        esac;;
+      hostname-history)
+        case "$sub" in
+          list) flags="--from --to --search --target --limit --offset --all --report-range";;
+          get)  flags="--from --to --target";;
         esac;;
       webhook)
         case "$sub" in
@@ -334,6 +341,7 @@ _cdnpro() {
             esac;;
         esac;;
       schema) flags="--direction";;
+      update) flags="--check --yes";;
     esac
     COMPREPLY=($(compgen -W "$GLOBAL $flags" -- "$cur")); return
   fi
@@ -342,7 +350,8 @@ _cdnpro() {
   if [[ $COMP_CWORD -eq 2 ]]; then
     case "$cmd" in
       auth)                 COMPREPLY=($(compgen -W "login logout list switch status" -- "$cur"));;
-      property)             COMPREPLY=($(compgen -W "list get create update delete version" -- "$cur"));;
+      property)             COMPREPLY=($(compgen -W "list get create update delete" -- "$cur"));;
+      property-version)     COMPREPLY=($(compgen -W "list get create update delete" -- "$cur"));;
       cert)                 COMPREPLY=($(compgen -W "list get create update delete download-csr" -- "$cur"));;
       cert-version)         COMPREPLY=($(compgen -W "get delete" -- "$cur"));;
       deploy)               COMPREPLY=($(compgen -W "list get create" -- "$cur"));;
@@ -354,7 +363,8 @@ _cdnpro() {
       log-config)           COMPREPLY=($(compgen -W "list get create update delete" -- "$cur"));;
       log-aggregation-point) COMPREPLY=($(compgen -W "list get create update delete summary" -- "$cur"));;
       annotation)           COMPREPLY=($(compgen -W "list get create update delete" -- "$cur"));;
-      hostname)             COMPREPLY=($(compgen -W "list get history" -- "$cur"));;
+      hostname)             COMPREPLY=($(compgen -W "list get" -- "$cur"));;
+      hostname-history)     COMPREPLY=($(compgen -W "list get" -- "$cur"));;
       webhook)              COMPREPLY=($(compgen -W "list get create update delete" -- "$cur"));;
       secret)               COMPREPLY=($(compgen -W "list get create update delete" -- "$cur"));;
       service-quota)        COMPREPLY=($(compgen -W "list get update" -- "$cur"));;
@@ -377,14 +387,6 @@ _cdnpro() {
   # ── Sub-subcommand completion (level 3) ──────────────────────────────────
   if [[ $COMP_CWORD -eq 3 ]]; then
     case "$cmd" in
-      property)
-        case "$sub" in
-          version) COMPREPLY=($(compgen -W "list get create update delete" -- "$cur"));;
-        esac;;
-      hostname)
-        case "$sub" in
-          history) COMPREPLY=($(compgen -W "list get" -- "$cur"));;
-        esac;;
       admin)
         case "$sub" in
           customer)    COMPREPLY=($(compgen -W "list get create update" -- "$cur"));;
@@ -420,16 +422,6 @@ function generateZshCompletion(): string {
     })
     .join('\n');
 
-  // Build subcommand helper functions
-  const subcmdFunctions = Object.entries(SUBCMDS)
-    .filter(([, subs]) => subs.length > 0)
-    .map(([cmd, subs]) => {
-      const entries = subs.map(s => `'${s}'`).join(' ');
-      const safe = cmd.replace(/-/g, '_');
-      return `_cdnpro_${safe}() {\n  local cmds=(${entries})\n  _describe 'subcommand' cmds\n}`;
-    })
-    .join('\n\n');
-
   return `\
 #compdef cdnpro
 # CDNPro CLI zsh completion
@@ -459,6 +451,7 @@ _cdnpro() {
       local commands=(
         'auth:Manage credential profiles'
         'property:Manage CDN properties'
+        'property-version:Manage property versions'
         'cert:Manage TLS certificates'
         'cert-version:Manage certificate versions'
         'deploy:Manage deployment tasks'
@@ -470,7 +463,8 @@ _cdnpro() {
         'log-config:Manage log configurations'
         'log-aggregation-point:Manage log aggregation points'
         'annotation:Manage annotations'
-        'hostname:Look up hostnames and history'
+        'hostname:Look up hostnames'
+        'hostname-history:Look up hostname history'
         'webhook:Manage webhooks'
         'secret:Manage secrets'
         'service-quota:Manage service quotas'
@@ -486,6 +480,7 @@ _cdnpro() {
         'admin:Admin operations (resellers only)'
         'schema:Inspect OpenAPI schema for any operation'
         'completion:Print shell completion script'
+        'update:Update cdnpro-cli to the latest version'
       )
       _describe 'command' commands
       ;;
@@ -494,6 +489,7 @@ _cdnpro() {
       case $cmd in
         auth)                 _cdnpro_auth;;
         property)             _cdnpro_property "$line[2]";;
+        property-version)     _cdnpro_property_version;;
         cert)                 _cdnpro_cert;;
         cert-version)         _cdnpro_cert_version;;
         deploy)               _cdnpro_deploy;;
@@ -506,6 +502,7 @@ _cdnpro() {
         log-aggregation-point) _cdnpro_log_aggregation_point;;
         annotation)           _cdnpro_annotation;;
         hostname)             _cdnpro_hostname;;
+        hostname-history)     _cdnpro_hostname_history;;
         webhook)              _cdnpro_webhook;;
         secret)               _cdnpro_secret;;
         service-quota)        _cdnpro_service_quota;;
@@ -514,6 +511,7 @@ _cdnpro() {
         admin)                _cdnpro_admin "$line[2]";;
         schema)               _cdnpro_schema "$line[2]";;
         completion)           _cdnpro_completion_cmd;;
+        update)               _arguments '--check[Check for an update without installing]' '(-y --yes)'{-y,--yes}'[Skip the confirmation prompt]';;
       esac
       ;;
   esac
@@ -525,14 +523,13 @@ _cdnpro_auth() {
 }
 
 _cdnpro_property() {
-  local sub=$1
-  if [[ -z $sub ]]; then
-    local cmds=('list:List properties' 'get:Get a property' 'create:Create a property' 'update:Update a property' 'delete:Delete a property' 'version:Manage property versions')
-    _describe 'subcommand' cmds
-  elif [[ $sub == version ]]; then
-    local cmds=('list:List versions' 'get:Get a version' 'create:Create a version' 'update:Update a version' 'delete:Delete a version')
-    _describe 'subcommand' cmds
-  fi
+  local cmds=('list:List properties' 'get:Get a property' 'create:Create a property' 'update:Update a property' 'delete:Delete a property')
+  _describe 'subcommand' cmds
+}
+
+_cdnpro_property_version() {
+  local cmds=('list:List versions' 'get:Get a version' 'create:Create a version' 'update:Update a version' 'delete:Delete a version')
+  _describe 'subcommand' cmds
 }
 
 _cdnpro_cert() {
@@ -617,7 +614,12 @@ _cdnpro_annotation() {
 }
 
 _cdnpro_hostname() {
-  local cmds=('list:List hostnames' 'get:Get hostname details' 'history:List or get hostname history')
+  local cmds=('list:List hostnames' 'get:Get hostname details')
+  _describe 'subcommand' cmds
+}
+
+_cdnpro_hostname_history() {
+  local cmds=('list:List hostname history' 'get:Get hostname history for one hostname')
   _describe 'subcommand' cmds
 }
 
@@ -871,6 +873,13 @@ Register-ArgumentCompleter -Native -CommandName @('cdnpro') -ScriptBlock {
       'property/create'         { @('--file','--example') }
       'property/update'         { @('--file','--example','--if-unmodified-since') }
       'property/delete'         { @('--confirm') }
+      'property-version/list'   { @('--search','--sort-by','--sort-order','--limit','--offset','--all') }
+      'property-version/create' { @('--file','--example') }
+      'property-version/update' { @('--file','--example','--if-unmodified-since') }
+      'hostname/list'           { @('--search','--target','--limit','--offset','--all','--report-range') }
+      'hostname-history/list'   { @('--from','--to','--search','--target','--limit','--offset','--all','--report-range') }
+      'hostname-history/get'    { @('--from','--to','--target') }
+      'update/'                 { @('--check','--yes') }
       'cert/list'               { @('--search','--target','--ca-only','--auto-renew','--sort-by','--sort-order','--limit','--offset','--all','--report-range') }
       { $_ -in 'cert/create','cert/update' } { @('--name','--cert','--key','--ca','--self-signed','--common-name','--san','--country','--state','--city','--company','--department','--email','--comments','--ca-only','--file','--example') }
       'cert/download-csr'       { @('--dcv','--out') }

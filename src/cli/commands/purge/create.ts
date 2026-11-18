@@ -4,11 +4,10 @@ import { CDNProClient } from '../../../client/CDNProClient';
 import { printCreateSuccess, OutputFormat } from '../../output';
 import { handleError } from '../../errors';
 import { CliError } from '../../errors';
-import { readBodyFile, emitValidationError, enrichWithLocationId, checkRequiredOption } from '../../util';
+import { readBodyFile, enrichWithLocationId, checkRequiredOption, validateRequestOrThrow } from '../../util';
 import { waitForTask } from '../../wait';
 import { getNamedSpecExample } from '../../../schema/loader';
 import { getExampleBody } from '../../../schema/synthesize';
-import { validateBody } from '../../../schema/validate';
 import {
   OptionMapping,
   FILE_EXAMPLE,
@@ -24,7 +23,7 @@ export const PURGE_CREATE_OPTIONS: OptionMapping[] = [
   { flag: '--header <name:value>',     target: 'body',     param: 'urls.headers',     description: 'Request header for cache-key disambiguation; repeatable', repeatable: true },
   { flag: '--action <action>',         target: 'body',     param: 'action',           description: 'Purge action: delete | invalidate [default: invalidate]' },
   { flag: '--name <description>',      target: 'body',     param: 'name',             description: 'Friendly name for the purge request' },
-  { flag: '--webhook <id>',            target: 'body',     param: 'webhookId',        description: 'Webhook ID to call on completion' },
+  { flag: '--webhook <id>',            target: 'body',     param: 'webhook',         description: 'Webhook ID to call on completion' },
   ...FILE_EXAMPLE,
   { flag: '--wait',                    target: 'cli-only', param: null,               description: 'Poll until purge completes', boolean: true },
   { flag: '--timeout <seconds>',       target: 'cli-only', param: null,               description: 'Max wait time [default: 600]' },
@@ -64,16 +63,12 @@ export function registerPurgeCreateCommand(parent: Command): void {
       }
 
       const globals = cmdObj.optsWithGlobals<GlobalOptions>();
-      const serverInfo = await resolveCredentials(globals);
-      const client = new CDNProClient(serverInfo);
       const fmt = globals.output as OutputFormat | undefined;
 
       let body: unknown;
 
       if (opts.file) {
         body = readBodyFile(opts.file);
-        const validation = validateBody('/cdn/purges', 'post', body);
-        if (!validation.valid) emitValidationError(validation, 'cdnpro purge create --example', globals.output);
       } else {
         checkRequiredOption(opts.target, '--target <env>');
 
@@ -93,6 +88,14 @@ export function registerPurgeCreateCommand(parent: Command): void {
         }
         if (regexes.length > 2) {
           throw new CliError('VALIDATION', `--regex accepts at most 2 entries, got ${regexes.length}`);
+        }
+
+        const action = (opts.action ?? 'invalidate').toLowerCase();
+        if (action !== 'delete' && action !== 'invalidate') {
+          throw new CliError('VALIDATION', `--action must be "delete" or "invalidate", got: ${opts.action}`);
+        }
+        if ((opts.header ?? []).length > 0 && urls.length === 0) {
+          throw new CliError('VALIDATION', '--header requires at least one --url');
         }
 
         const purgeBody: Record<string, unknown> = {
@@ -117,12 +120,24 @@ export function registerPurgeCreateCommand(parent: Command): void {
 
         if (dirs.length > 0) purgeBody['dirs'] = { dirs };
         if (regexes.length > 0) purgeBody['regex'] = { regexes };
-        if (opts.action) purgeBody['action'] = opts.action;
+        purgeBody['action'] = action;
         if (opts.name) purgeBody['name'] = opts.name;
-        if (opts.webhook) purgeBody['webhookId'] = opts.webhook;
+        if (opts.webhook) purgeBody['webhook'] = opts.webhook;
 
         body = purgeBody;
       }
+
+      validateRequestOrThrow(
+        '/cdn/purges',
+        'post',
+        body,
+        'cdnpro purge create --example',
+        globals.output,
+        PURGE_CREATE_OPTIONS,
+      );
+
+      const serverInfo = await resolveCredentials(globals);
+      const client = new CDNProClient(serverInfo);
 
       const reqOptions = {
         ...(globals.onBehalfOf ? { onBehalfOf: globals.onBehalfOf } : {}),

@@ -3,7 +3,7 @@ import { resolveCredentials, GlobalOptions } from '../../config';
 import { CDNProClient } from '../../../client/CDNProClient';
 import { printResult, OutputFormat } from '../../output';
 import { handleError } from '../../errors';
-import { readBodyFile } from '../../util';
+import { readBodyFile, validateRequestOrThrow } from '../../util';
 import { getExampleBody } from '../../../schema/synthesize';
 import {
   OptionMapping,
@@ -70,9 +70,6 @@ export function registerSummaryReportCommand(
       checkRequiredMappings(opts, options);
 
       const globals = cmdObj.optsWithGlobals<GlobalOptions>();
-      const serverInfo = await resolveCredentials(globals);
-      const client = new CDNProClient(serverInfo);
-      const fmt = globals.output as OutputFormat | undefined;
 
       let body: unknown;
       const { query, reqOptions: mappedReqOptions, body: builtBody } = buildRequestFromMapping(opts, options);
@@ -82,6 +79,19 @@ export function registerSummaryReportCommand(
       } else {
         body = builtBody;
       }
+
+      validateRequestOrThrow(
+        path,
+        'post',
+        body,
+        `cdnpro report ${name} --example`,
+        globals.output,
+        options,
+      );
+
+      const serverInfo = await resolveCredentials(globals);
+      const client = new CDNProClient(serverInfo);
+      const fmt = globals.output as OutputFormat | undefined;
 
       const reqOptions = {
         ...(globals.onBehalfOf ? { onBehalfOf: globals.onBehalfOf } : {}),

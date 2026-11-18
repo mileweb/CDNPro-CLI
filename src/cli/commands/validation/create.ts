@@ -4,10 +4,9 @@ import { CDNProClient } from '../../../client/CDNProClient';
 import { printCreateSuccess, OutputFormat } from '../../output';
 import { handleError } from '../../errors';
 import { CliError } from '../../errors';
-import { readBodyFile, emitValidationError, enrichWithLocationId, checkRequiredOption } from "../../util";
+import { readBodyFile, enrichWithLocationId, checkRequiredOption, validateRequestOrThrow, parseIntegerOption } from "../../util";
 import { waitForTask } from '../../wait';
 import { getExampleBody } from '../../../schema/synthesize';
-import { validateBody } from '../../../schema/validate';
 import {
   OptionMapping,
   FILE_EXAMPLE,
@@ -19,7 +18,7 @@ export const VALIDATION_CREATE_OPTIONS: OptionMapping[] = [
   { flag: '--property-id <id>', target: 'body', param: 'propertyId', description: 'Property ID to validate' },
   { flag: '--property-version <version>', target: 'body', param: 'version', description: 'Property version to validate' },
   { flag: '--name <name>', target: 'body', param: 'name', description: 'Friendly name for the validation task' },
-  { flag: '--webhook <id>', target: 'body', param: 'webhookId', description: 'Webhook ID to call on task completion' },
+  { flag: '--webhook <id>', target: 'body', param: 'webhook', description: 'Webhook ID to call on task completion' },
   ...FILE_EXAMPLE,
   { flag: '--wait', target: 'cli-only', param: null, description: 'Poll until validation completes', boolean: true },
   { flag: '--timeout <seconds>', target: 'cli-only', param: null, description: 'Max wait time [default: 300]' },
@@ -55,28 +54,36 @@ export function registerValidationCreateCommand(parent: Command): void {
       }
 
       const globals = cmdObj.optsWithGlobals<GlobalOptions>();
-      const serverInfo = await resolveCredentials(globals);
-      const client = new CDNProClient(serverInfo);
       const fmt = globals.output as OutputFormat | undefined;
 
       let body: unknown;
 
       if (opts.file) {
         body = readBodyFile(opts.file);
-        const validation = validateBody('/cdn/validations', 'post', body);
-        if (!validation.valid) emitValidationError(validation, 'cdnpro validation create --example', globals.output);
       } else {
         checkRequiredOption(opts.propertyId, '--property-id <id>');
         checkRequiredOption(opts.propertyVersion, '--property-version <version>');
 
         const taskBody: Record<string, unknown> = {
           propertyId: opts.propertyId,
-          version: opts.propertyVersion,
+          version: parseIntegerOption(opts.propertyVersion, '--property-version'),
         };
         if (opts.name) taskBody['name'] = opts.name;
-        if (opts.webhook) taskBody['webhookId'] = opts.webhook;
+        if (opts.webhook) taskBody['webhook'] = opts.webhook;
         body = taskBody;
       }
+
+      validateRequestOrThrow(
+        '/cdn/validations',
+        'post',
+        body,
+        'cdnpro validation create --example',
+        globals.output,
+        VALIDATION_CREATE_OPTIONS,
+      );
+
+      const serverInfo = await resolveCredentials(globals);
+      const client = new CDNProClient(serverInfo);
 
       const reqOptions = {
         ...(globals.onBehalfOf ? { onBehalfOf: globals.onBehalfOf } : {}),
