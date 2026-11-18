@@ -218,7 +218,8 @@ _cdnpro() {
       cert)
         case "$sub" in
           list)   flags="--search --target --ca-only --auto-renew --sort-by --sort-order --limit --offset --all --report-range";;
-          create|update) flags="--name --cert --key --ca --self-signed --common-name --san --country --state --city --company --department --email --comments --ca-only --file --example --if-unmodified-since";;
+          create) flags="--name --cert --key --ca --self-signed --common-name --san --country --state --city --company --department --email --comments --ca-only --file --example";;
+          update) flags="--name --cert --key --ca --self-signed --common-name --san --country --state --city --company --department --email --comments --ca-only --file --example";;
           download-csr) flags="--dcv --out";;
         esac;;
       deploy)
@@ -247,7 +248,7 @@ _cdnpro() {
         esac;;
       prefetch)
         case "$sub" in
-          create) flags="--file --wait --timeout --poll-interval";;
+          create) flags="--name --url --region --start-time --webhook --file --example --wait --timeout --poll-interval";;
           list)   flags="--from --to --search --sort-by --sort-order --limit --offset --all --report-range";;
           tokens) flags="--target";;
         esac;;
@@ -273,7 +274,7 @@ _cdnpro() {
         case "$sub" in
           list)   flags="--from --to --type --search --limit --offset --all";;
           create) flags="--file --example";;
-          update) flags="--file --if-unmodified-since";;
+          update) flags="--file";;
         esac;;
       hostname)
         case "$sub" in
@@ -871,7 +872,7 @@ Register-ArgumentCompleter -Native -CommandName @('cdnpro') -ScriptBlock {
       'property/update'         { @('--file','--example','--if-unmodified-since') }
       'property/delete'         { @('--confirm') }
       'cert/list'               { @('--search','--target','--ca-only','--auto-renew','--sort-by','--sort-order','--limit','--offset','--all','--report-range') }
-      { $_ -in 'cert/create','cert/update' } { @('--name','--cert','--key','--ca','--self-signed','--common-name','--san','--country','--state','--city','--company','--department','--email','--comments','--ca-only','--file','--example','--if-unmodified-since') }
+      { $_ -in 'cert/create','cert/update' } { @('--name','--cert','--key','--ca','--self-signed','--common-name','--san','--country','--state','--city','--company','--department','--email','--comments','--ca-only','--file','--example') }
       'cert/download-csr'       { @('--dcv','--out') }
       'deploy/list'             { @('--from','--to','--target','--status','--property','--cert','--search','--task-ids','--sort-by','--sort-order','--limit','--offset','--all','--report-range') }
       'deploy/create'           { @('--target','--deploy-property','--remove-property','--deploy-cert','--remove-cert','--name','--webhook','--file','--wait','--timeout','--poll-interval','--skip-certificate-check','--skip-client-ca-certificate-check','--skip-origin-auth-certificate-check','--skip-usage-check','--example') }
@@ -885,7 +886,7 @@ Register-ArgumentCompleter -Native -CommandName @('cdnpro') -ScriptBlock {
       'purge/list'              { @('--from','--to','--target','--action','--search','--sort-by','--sort-order','--max-success-rate','--limit','--offset','--all','--report-range') }
       'purge/summary'           { @('--from','--to','--target') }
       'purge/tokens'            { @('--target') }
-      'prefetch/create'         { @('--file','--wait','--timeout','--poll-interval') }
+      'prefetch/create'         { @('--name','--url','--region','--start-time','--webhook','--file','--example','--wait','--timeout','--poll-interval') }
       'prefetch/list'           { @('--from','--to','--search','--sort-by','--sort-order','--limit','--offset','--all','--report-range') }
       'prefetch/tokens'         { @('--target') }
       'report/logs'             { @('--from','--to','--hostname','--file') }

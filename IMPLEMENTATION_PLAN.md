@@ -383,7 +383,7 @@ JSONL emits one object per line (for `--all` pagination and streaming):
 | Header | CLI flag | Applies to | Option-map preset |
 |---|---|---|---|
 | `Report-Range` | `--report-range <scope>` | All `list` subcommands; all `report` subcommands | `REPORT_RANGE` |
-| `If-Unmodified-Since` | `--if-unmodified-since <date>` | All update/patch commands for mutable resources | `IF_UNMODIFIED_SINCE` |
+| `If-Unmodified-Since` | `--if-unmodified-since <date>` | Update/patch operations that declare the header: property, property-version, edge-hostname (update + replace), service-quota, api-permission, webhook, secret, log-config, log-aggregation-point | `IF_UNMODIFIED_SINCE` |
 | `Check-Certificate` | `--skip-certificate-check` | `deploy create` only | (inline) |
 | `Check-Client-CA-Certificate` | `--skip-client-ca-certificate-check` | `deploy create` only | (inline) |
 | `Check-Origin-Auth-Certificate` | `--skip-origin-auth-certificate-check` | `deploy create` only | (inline) |
@@ -391,9 +391,11 @@ JSONL emits one object per line (for `--all` pagination and streaming):
 
 `Report-Range` is on 30+ operations (list and report operations; never on create/update/delete), so placing it on the root command would silently accept it on operations where the server ignores it — misleading to agents reading `--help`. It is declared on each command that supports it.
 
-`If-Unmodified-Since` is the server's optimistic concurrency control mechanism. The server returns a `Last-Modified` response header on GET calls for mutable resources (properties, property versions, certificates, edge hostnames, secrets, webhooks, annotations, log configs, service quotas). Passing this timestamp back via `--if-unmodified-since` on a subsequent update guards against overwriting a change made by another client. The server responds with HTTP 412 (Precondition Failed) if the resource was modified after the given timestamp. The CLI surfaces `Last-Modified` in JSON output under `meta.lastModified` so agents can capture it for subsequent update calls.
+`If-Unmodified-Since` is the server's optimistic concurrency control mechanism. The server returns a `Last-Modified` response header on GET calls for resources that support it (properties, property versions, edge hostnames, service quotas, API permissions, webhooks, secrets, log configs, log aggregation points). Passing this timestamp back via `--if-unmodified-since` on a subsequent update guards against overwriting a change made by another client. The server responds with HTTP 412 (Precondition Failed) if the resource was modified after the given timestamp. The CLI surfaces `Last-Modified` in JSON output under `meta.lastModified` so agents can capture it for subsequent update calls.
 
-The three `Check-*` headers on `deploy create` are safety-bypass flags that suppress independent server-side validation checks. Each targets a different check: TLS certificate validity (`Check-Certificate`), CA certificate for client verification (`Check-Client-CA-Certificate`), and certificate used for origin authentication (`Check-Origin-Auth-Certificate`). All headers are formally documented in `openapi.json`, which `cdnpro schema` reads as the single authoritative source (see Section 5.3).
+The flag is declared only on operations whose spec entry declares both the `If-Unmodified-Since` parameter and the `412` response. It is deliberately absent from `cert update`, `annotation update`, and the `admin` customer/contact/api-account update commands: their PATCH operations in `openapi.json` neither accept the header nor document a `412` response, so the flag must not be advertised there.
+
+The three `Check-*` headers on `deploy create` are safety-bypass flags that suppress independent server-side validation checks. Each targets a different check: TLS certificate validity and SAN coverage (`Check-Certificate`), CA certificate for client verification (`Check-Client-CA-Certificate`), and certificate used for origin authentication (`Check-Origin-Auth-Certificate`). All headers are formally documented in `openapi.json`, which `cdnpro schema` reads as the single authoritative source (see Section 5.3).
 
 ### 3.3 Exit codes
 
@@ -590,8 +592,6 @@ cdnpro cert update <id>
   # Full-body fallback
   [--file <path>]
 
-  # Concurrency control
-  [--if-unmodified-since <date>]               If-Unmodified-Since header (RFC 1123)
   [--example]
 
 cdnpro cert delete <id>
@@ -861,7 +861,6 @@ cdnpro annotation list
 cdnpro annotation get <id>
 cdnpro annotation create --file <path> [--example]
 cdnpro annotation update <id> --file <path>
-  [--if-unmodified-since <date>]
 cdnpro annotation delete <id>
 ```
 
@@ -1499,7 +1498,7 @@ This means the schema output always reflects the actual CLI flags, and adding a 
 | `SORT_OPTIONS` | `--sort-by`, `--sort-order` | List commands with sort support |
 | `REPORT_RANGE` | `--report-range` | List/report commands |
 | `FILE_EXAMPLE` | `--file`, `--example` | All create/update commands |
-| `IF_UNMODIFIED_SINCE` | `--if-unmodified-since` | All update commands |
+| `IF_UNMODIFIED_SINCE` | `--if-unmodified-since` | Update operations whose spec entry declares the header: property, property-version, edge-hostname (update/replace), service-quota, api-permission, webhook, secret, log-config, log-aggregation-point |
 | `CONFIRM` | `--confirm` | All delete commands |
 | `ALL` | `--all` | List commands with auto-pagination |
 

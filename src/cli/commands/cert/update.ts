@@ -11,7 +11,6 @@ import { validateBody } from '../../../schema/validate';
 import {
   OptionMapping,
   FILE_EXAMPLE,
-  IF_UNMODIFIED_SINCE,
   registerOptionsFromMapping,
   registerMappings,
 } from '../../option-map';
@@ -35,9 +34,8 @@ export const CERT_UPDATE_OPTIONS: OptionMapping[] = [
   { flag: '--comments <text>',   target: 'body', param: 'newVersion.comments',               description: 'Version comments' },
   // CA-only mode
   { flag: '--ca-only',           target: 'body', param: 'caOnly',                            description: 'Update CA chain certificate only', boolean: true },
-  // Full-body fallback + concurrency
+  // Full-body fallback
   ...FILE_EXAMPLE,
-  IF_UNMODIFIED_SINCE,
 ];
 
 function readPemFile(filePath: string, label: string): string {
@@ -85,7 +83,6 @@ interface UpdateOpts {
   comments?: string;
   caOnly?: boolean;
   file?: string;
-  ifUnmodifiedSince?: string;
   example?: boolean;
 }
 
@@ -164,7 +161,6 @@ export function registerCertUpdateCommand(parent: Command): void {
 
         const reqOptions = {
           ...(globals.onBehalfOf ? { onBehalfOf: globals.onBehalfOf } : {}),
-          ...(opts.ifUnmodifiedSince ? { headers: { 'If-Unmodified-Since': opts.ifUnmodifiedSince } } : {}),
           ...(globals.verbose ? { verbose: globals.verbose } : {}),
           dateOverride: dateStr,
         };
@@ -214,7 +210,6 @@ export function registerCertUpdateCommand(parent: Command): void {
 
       const reqOptions = {
         ...(globals.onBehalfOf ? { onBehalfOf: globals.onBehalfOf } : {}),
-        ...(opts.ifUnmodifiedSince ? { headers: { 'If-Unmodified-Since': opts.ifUnmodifiedSince } } : {}),
         ...(globals.verbose ? { verbose: globals.verbose } : {}),
       };
 

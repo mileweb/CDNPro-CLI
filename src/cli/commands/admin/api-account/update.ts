@@ -8,14 +8,12 @@ import { validateBody } from '../../../../schema/validate';
 import {
   OptionMapping,
   FILE_EXAMPLE,
-  IF_UNMODIFIED_SINCE,
   registerOptionsFromMapping,
   registerMappings,
 } from '../../../option-map';
 
 export const ADMIN_API_ACCOUNT_UPDATE_OPTIONS: OptionMapping[] = [
   ...FILE_EXAMPLE,
-  IF_UNMODIFIED_SINCE,
 ];
 
 export function registerAdminApiAccountUpdateCommand(parent: Command): void {

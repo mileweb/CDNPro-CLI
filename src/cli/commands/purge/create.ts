@@ -70,13 +70,13 @@ export function registerPurgeCreateCommand(parent: Command): void {
 
       let body: unknown;
 
-      checkRequiredOption(opts.target, '--target <env>');
-
       if (opts.file) {
         body = readBodyFile(opts.file);
         const validation = validateBody('/cdn/purges', 'post', body);
         if (!validation.valid) emitValidationError(validation, 'cdnpro purge create --example', globals.output);
       } else {
+        checkRequiredOption(opts.target, '--target <env>');
+
         const urls = opts.url ?? [];
         const dirs = opts.dir ?? [];
         const regexes = opts.regex ?? [];

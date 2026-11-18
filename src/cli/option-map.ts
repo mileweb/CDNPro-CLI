@@ -49,7 +49,7 @@ export const IF_UNMODIFIED_SINCE: OptionMapping = {
   flag: '--if-unmodified-since <date>',
   target: 'header',
   param: 'If-Unmodified-Since',
-  description: 'Fail if resource has been modified since this RFC 3339 date',
+  description: 'Fail if resource has been modified since this RFC 1123 date',
 };
 
 export const CONFIRM: OptionMapping = {
