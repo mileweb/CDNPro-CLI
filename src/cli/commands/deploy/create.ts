@@ -26,9 +26,9 @@ export const DEPLOY_CREATE_OPTIONS: OptionMapping[] = [
   { flag: '--name <name>',               target: 'body',   param: 'name',            description: 'Friendly name for the deployment task' },
   { flag: '--webhook <id>',              target: 'body',   param: 'webhookId',       description: 'Webhook ID to call on task completion' },
   // Bypass headers
-  { flag: '--skip-certificate-check',            target: 'header', param: 'Check-Certificate',            description: 'Send Check-Certificate: no', boolean: true },
-  { flag: '--skip-client-ca-certificate-check',  target: 'header', param: 'Check-Client-CA-Certificate',  description: 'Send Check-Client-CA-Certificate: no', boolean: true },
-  { flag: '--skip-origin-auth-certificate-check', target: 'header', param: 'Check-Origin-Auth-Certificate', description: 'Send Check-Origin-Auth-Certificate: no', boolean: true },
+  { flag: '--skip-certificate-check',            target: 'header', param: 'Check-Certificate',            description: 'Skip certificate validity and SAN checks', boolean: true },
+  { flag: '--skip-client-ca-certificate-check',  target: 'header', param: 'Check-Client-CA-Certificate',  description: 'Skip client CA certificate expiry check', boolean: true },
+  { flag: '--skip-origin-auth-certificate-check', target: 'header', param: 'Check-Origin-Auth-Certificate', description: 'Skip origin auth certificate expiry check', boolean: true },
   { flag: '--skip-usage-check',                  target: 'header', param: 'Check-Usage',                  description: 'Skip active-hostname safety check', boolean: true },
   // Full-body + polling
   ...FILE_EXAMPLE,
@@ -94,13 +94,13 @@ export function registerDeployCreateCommand(parent: Command): void {
 
       let body: unknown;
 
-      checkRequiredOption(opts.target, '--target <env>');
-
       if (opts.file) {
         body = readBodyFile(opts.file);
         const validation = validateBody('/cdn/deploymentTasks', 'post', body);
         if (!validation.valid) emitValidationError(validation, 'cdnpro deploy create --example', globals.output);
       } else {
+        checkRequiredOption(opts.target, '--target <env>');
+
         const hasActions =
           (opts.deployProperty?.length ?? 0) > 0 ||
           (opts.removeProperty?.length ?? 0) > 0 ||

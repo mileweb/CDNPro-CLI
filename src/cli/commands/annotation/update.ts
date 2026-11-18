@@ -8,14 +8,12 @@ import { validateBody } from '../../../schema/validate';
 import {
   OptionMapping,
   FILE_EXAMPLE,
-  IF_UNMODIFIED_SINCE,
   registerOptionsFromMapping,
   registerMappings,
 } from '../../option-map';
 
 export const ANNOTATION_UPDATE_OPTIONS: OptionMapping[] = [
   ...FILE_EXAMPLE,
-  IF_UNMODIFIED_SINCE,
 ];
 
 export function registerAnnotationUpdateCommand(parent: Command): void {
@@ -45,13 +43,9 @@ export function registerAnnotationUpdateCommand(parent: Command): void {
       const validation = validateBody('/cdn/annotations/{id}', 'patch', body);
       if (!validation.valid) emitValidationError(validation, 'cdnpro annotation update --example', globals.output);
 
-      const headers: Record<string, string> = {};
-      if (opts.ifUnmodifiedSince) headers['If-Unmodified-Since'] = opts.ifUnmodifiedSince as string;
-
       const reqOptions = {
         ...(globals.onBehalfOf ? { onBehalfOf: globals.onBehalfOf } : {}),
         ...(globals.verbose ? { verbose: globals.verbose } : {}),
-        ...(Object.keys(headers).length > 0 ? { headers } : {}),
       };
 
       await client.annotations.update(id, body, reqOptions);
