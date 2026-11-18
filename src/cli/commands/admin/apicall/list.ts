@@ -33,7 +33,7 @@ export function registerAdminApiCallListCommand(parent: Command): void {
     .description('List API call log entries');
 
   registerOptionsFromMapping(cmd, APICALL_LIST_OPTIONS);
-  registerMappings('apicall', 'list', APICALL_LIST_OPTIONS);
+  registerMappings('admin-apicall', 'list', APICALL_LIST_OPTIONS);
 
   cmd.action(async (opts: Record<string, unknown>, cmdObj: Command) => {
     try {

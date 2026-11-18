@@ -149,6 +149,7 @@ export const OPERATION_MAP: Record<string, { method: string; path: string }> = {
   'admin-api-account.update':      { method: 'patch',  path: '/ngadmin/apiAccounts/{id}' },
   'admin-api-account.delete':      { method: 'delete', path: '/ngadmin/apiAccounts/{id}' },
   'admin-apicall.list':            { method: 'get',    path: '/ngadmin/apicalls' },
+  'admin-apicall.counts':          { method: 'get',    path: '/ngadmin/apicalls/counts' },
   'admin-apicall.get':             { method: 'get',    path: '/ngadmin/apicalls/{id}' },
 };
 

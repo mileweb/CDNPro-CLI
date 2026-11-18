@@ -5894,6 +5894,11 @@ export interface operations {
                         expirationTime?: string;
                         /**
                          * Format: date-time
+                         * @description An RFC 3339 format date indicating when the certificate's validity starts. This field will be returned only for a server certificate not a CA certificate.
+                         */
+                        notBeforeTime?: string;
+                        /**
+                         * Format: date-time
                          * @description An RFC 3339 format date indicating when the certificate version was created.
                          */
                         creationTime?: string;
@@ -5935,6 +5940,8 @@ export interface operations {
                         type?: string;
                         /** @description Whether or not the certificate version can be deleted. A version can be deleted if it is not the only version, and it has never been deployed to staging or production. */
                         deletable: boolean;
+                        /** @description The certificate in PEM format. This field will be returned only for a server certificate not a CA certificate. */
+                        certificate?: string;
                         /** @description A value of <i>true</i> indicates this is a CA certificate used for verification of client requests only. A value of <i>false</i> indicates this is a server certificate. Refer to [this page for more about the certificate types](</docs/portal/certificates/overview#overview-of-certificates>). */
                         caOnly: boolean;
                     };

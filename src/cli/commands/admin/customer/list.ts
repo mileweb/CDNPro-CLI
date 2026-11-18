@@ -17,6 +17,7 @@ interface ListOpts {
   ids?: string;
   status?: string;
   products?: string;
+  checkHistoryProduct?: boolean;
   regionalOffices?: string;
   sortBy?: string;
   sortOrder?: string;
@@ -31,6 +32,7 @@ export function registerAdminCustomerListCommand(parent: Command): void {
     { flag: '--ids <id,...>',                     target: 'query', param: 'ids',              description: 'Comma-separated customer IDs to filter' },
     { flag: '--status <status>',                  target: 'query', param: 'status',           description: 'Filter by status: active | suspended' },
     { flag: '--products <product,...>',           target: 'query', param: 'products',         description: 'Filter by product codes' },
+    { flag: '--check-history-product',            target: 'query', param: 'checkHistoryProduct', description: 'With --products, also match products in the customer\'s historicalProducts list', boolean: true },
     { flag: '--regional-offices <office,...>',    target: 'query', param: 'regionalOffices',  description: 'Filter by regional office codes' },
     ...SORT_OPTIONS,
     ...PAGINATION_OPTIONS,
@@ -54,6 +56,7 @@ export function registerAdminCustomerListCommand(parent: Command): void {
       if (opts.ids) query['ids'] = opts.ids;
       if (opts.status) query['status'] = opts.status;
       if (opts.products) query['products'] = opts.products;
+      if (opts.checkHistoryProduct) query['checkHistoryProduct'] = 'true';
       if (opts.regionalOffices) query['regionalOffices'] = opts.regionalOffices;
       if (opts.sortBy) query['sortBy'] = opts.sortBy;
       if (opts.sortOrder) query['sortOrder'] = opts.sortOrder;
