@@ -184,7 +184,7 @@ _cdnpro() {
     --status)
       case "$cmd" in
         deploy)        COMPREPLY=($(compgen -W "waiting inprogress failed succeeded" -- "$cur"));;
-        validation)    COMPREPLY=($(compgen -W "waiting in-progress failed succeeded" -- "$cur"));;
+        validation)    COMPREPLY=($(compgen -W "waiting 'in progress' failed succeeded" -- "$cur")); compopt -o filenames 2>/dev/null;;
         service-quota) COMPREPLY=($(compgen -W "active suspended trial terminated" -- "$cur"));;
         admin)
           case "$sub" in
@@ -858,7 +858,7 @@ Register-ArgumentCompleter -Native -CommandName @('cdnpro') -ScriptBlock {
       '--status' {
         switch ($cmd) {
           'deploy'        { Complete @('waiting','inprogress','failed','succeeded'); return }
-          'validation'    { Complete @('waiting','in-progress','failed','succeeded'); return }
+          'validation'    { Complete @('waiting','in progress','failed','succeeded'); return }
           'service-quota' { Complete @('active','suspended','trial','terminated'); return }
         }
       }

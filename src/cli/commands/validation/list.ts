@@ -21,7 +21,7 @@ export const VALIDATION_LIST_OPTIONS: OptionMapping[] = [
   { flag: '--to <date>',                 target: 'query', param: 'to',               description: 'Filter by submission time (end)' },
   { flag: '--property <id>',             target: 'query', param: 'propertyId',       description: 'Filter by property ID' },
   { flag: '--property-version <version>', target: 'query', param: 'propertyVersion', description: 'Filter by property version' },
-  { flag: '--status <status>',           target: 'query', param: 'status',           description: 'Filter by status: waiting | in-progress | failed | succeeded' },
+  { flag: '--status <status>',           target: 'query', param: 'status',           description: 'Filter by status: waiting | in progress | failed | succeeded' },
   { flag: '--search <term>',             target: 'query', param: 'search',           description: 'Keyword search' },
   ...SORT_OPTIONS,
   ...PAGINATION_OPTIONS,

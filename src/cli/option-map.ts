@@ -1,5 +1,7 @@
 import { Command } from 'commander';
 import { CliError } from './errors';
+import { lookupOperation } from '../schema/query';
+import { getParameterEnum } from '../schema/loader';
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -133,6 +135,7 @@ export function registerOptionsFromMapping(cmd: Command, mappings: OptionMapping
 export interface RequestGlobals {
   onBehalfOf?: string;
   verbose?: number;
+  output?: string;
 }
 
 /** Build { query, reqOptions, body } from parsed Commander opts. */
@@ -178,7 +181,121 @@ export function buildRequestFromMapping(
     }
   }
 
+  const target = mappingOperations.get(mappings);
+  if (target) {
+    const violations = findEnumViolations(
+      target.resource,
+      target.operation,
+      mappings,
+      query,
+      reqOptions,
+    );
+    if (violations.length > 0) {
+      emitEnumViolations(violations, target.resource, target.operation, globals?.output);
+    }
+  }
+
   return { query, reqOptions, body: bodyObj };
+}
+
+// ── Schema-driven enum validation ─────────────────────────────────
+// registerMappings associates each option array with its API operation, so
+// buildRequestFromMapping can reject invalid enumerated values without every
+// command passing the operation explicitly.
+const mappingOperations = new WeakMap<
+  OptionMapping[],
+  { resource: string; operation: string }
+>();
+
+interface EnumViolation {
+  cliFlag: string;
+  location: 'query' | 'header';
+  param: string;
+  value: string;
+  allowed: string[];
+}
+
+function findEnumViolations(
+  resource: string,
+  operation: string,
+  mappings: OptionMapping[],
+  query: Record<string, unknown>,
+  reqOptions: Record<string, unknown>,
+): EnumViolation[] {
+  const entry = lookupOperation(resource, operation);
+  if (!entry) return [];
+
+  const violations: EnumViolation[] = [];
+  for (const m of mappings) {
+    if (m.target !== 'query' && m.target !== 'header') continue;
+    if (!m.param) continue;
+
+    const raw = m.target === 'query'
+      ? query[m.param]
+      : reqOptions[flagToAttr(m.flag)];
+    if (raw === undefined || raw === null || raw === '') continue;
+
+    const constraint = getParameterEnum(entry.path, entry.method, m.target, m.param);
+    if (!constraint) continue;
+
+    // Query arrays are encoded comma-separated; repeatable flags arrive as arrays.
+    const values = constraint.type === 'array'
+      ? (Array.isArray(raw) ? raw.map(String) : String(raw).split(','))
+      : [String(raw)];
+
+    for (const value of values) {
+      if (!constraint.values.includes(value)) {
+        violations.push({
+          cliFlag: flagToCliFlag(m.flag),
+          location: m.target,
+          param: m.param,
+          value,
+          allowed: constraint.values,
+        });
+      }
+    }
+  }
+  return violations;
+}
+
+function emitEnumViolations(
+  violations: EnumViolation[],
+  resource: string,
+  operation: string,
+  output?: string,
+): never {
+  const isHuman = output == null ? !!process.stdout.isTTY : output === 'table';
+  const message = violations.length === 1
+    ? `Invalid value for ${violations[0].cliFlag}`
+    : `Invalid values for ${violations.length} enumerated options`;
+
+  if (isHuman) {
+    process.stderr.write(`Error: ${message}\n`);
+    for (const v of violations) {
+      process.stderr.write(
+        `  - ${v.cliFlag} "${v.value}": must be one of: ${v.allowed.join(', ')}\n`,
+      );
+    }
+    process.stderr.write(`\nTip: run \`cdnpro schema ${resource} ${operation}\` to see accepted values\n`);
+  } else {
+    const envelope = {
+      error: {
+        code: 'VALIDATION',
+        message,
+        validationErrors: violations.map(v => ({
+          path: `${v.location}.${v.param}`,
+          message: `must be one of: ${v.allowed.join(', ')}`,
+          keyword: 'enum',
+          params: { allowedValues: v.allowed },
+          cliFlag: v.cliFlag,
+        })),
+        hint: `Run \`cdnpro schema ${resource} ${operation}\` to see accepted values`,
+      },
+    };
+    process.stdout.write(JSON.stringify(envelope, null, 2) + '\n');
+  }
+
+  throw new CliError('VALIDATION', message, undefined, true);
 }
 
 /** Validate required options from mappings. */
@@ -222,6 +339,7 @@ export function registerMappings(
   mappings: OptionMapping[],
 ): void {
   mappingRegistry.set(`${resource}.${operation}`, mappings);
+  mappingOperations.set(mappings, { resource, operation });
 }
 
 /** Look up option mappings for a CLI operation. */

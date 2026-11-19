@@ -94,6 +94,61 @@ export function getQueryLimitMaximum(path: string, method: string): number | und
   return typeof maximum === 'number' ? maximum : undefined;
 }
 
+/** Resolve a local `$ref` (e.g. "#/components/schemas/X") against the spec. */
+function resolveSchemaRef(schema: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
+  let current = schema;
+  const seen = new Set<string>();
+  while (current && typeof current['$ref'] === 'string') {
+    const ref = current['$ref'] as string;
+    if (seen.has(ref)) return undefined;
+    seen.add(ref);
+    current = ref.split('/').slice(1).reduce<unknown>(
+      (node, key) => (node as Record<string, unknown> | undefined)?.[key],
+      getSpec() as unknown,
+    ) as Record<string, unknown> | undefined;
+  }
+  return current;
+}
+
+export interface ParameterEnum {
+  /** Parameter type from the schema ('string', 'array', …). */
+  type?: string;
+  /** Allowed values. For array parameters, the enum of the item schema. */
+  values: string[];
+}
+
+/**
+ * Returns the enum constraint for a declared query/header parameter, or
+ * undefined when the operation does not declare the parameter or the spec
+ * declares no enum for it.
+ */
+export function getParameterEnum(
+  path: string,
+  method: string,
+  location: 'query' | 'header',
+  name: string,
+): ParameterEnum | undefined {
+  const spec = getSpec();
+  const op = (spec.paths as Record<string, Record<string, unknown>>)[path]?.[method.toLowerCase()] as Record<string, unknown> | undefined;
+  const params = op?.['parameters'] as Array<Record<string, unknown>> | undefined;
+  const param = params?.find(p => p['in'] === location && p['name'] === name);
+  if (!param) return undefined;
+
+  const schema = resolveSchemaRef(param['schema'] as Record<string, unknown> | undefined);
+  if (!schema) return undefined;
+
+  const type = typeof schema['type'] === 'string' ? schema['type'] as string : undefined;
+  const direct = schema['enum'];
+  const itemSchema = type === 'array'
+    ? resolveSchemaRef(schema['items'] as Record<string, unknown> | undefined)
+    : undefined;
+  const values = Array.isArray(direct) ? direct : itemSchema?.['enum'];
+
+  if (!Array.isArray(values)) return undefined;
+  return { type, values: values.map(String) };
+}
+
+
 /**
  * Returns a specific named example from the spec, or the first example if name is not found.
  * Returns null if no examples exist.

@@ -132,6 +132,10 @@ These options are available on every command:
 | `-v, --verbose` | Increase verbosity (`-vv` prints redacted HTTP diagnostics to stderr) |
 | `--on-behalf-of <id>` | Reseller: act on behalf of a customer |
 
+Enumerated option values (e.g. `--target`, `--status`, `--action`) are validated against the
+OpenAPI spec before the request is sent. An invalid value exits with code 4 and lists the accepted
+values.
+
 ## Output Formats
 
 | Format | When used | Description |
@@ -330,7 +334,7 @@ The `--wait` flag shows a spinner in a TTY and NDJSON progress lines when piped.
 ```bash
 cdnpro validation list [--from <date>] [--to <date>] [--property <id>]
                       [--property-version <version>]
-                      [--status <waiting|in-progress|failed|succeeded>]
+                      [--status <waiting|"in progress"|failed|succeeded>]
                       [--search <keyword>] [--sort-by <field>]
                       [--sort-order <asc|desc>] [--limit <n>] [--offset <n>]
                       [--report-range <scope>] [--all]
