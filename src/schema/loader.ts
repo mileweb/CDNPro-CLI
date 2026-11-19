@@ -81,6 +81,20 @@ export function getQueryParameters(path: string, method: string): Record<string,
 }
 
 /**
+ * Returns the schema-declared maximum for the `limit` query parameter of an
+ * operation, or undefined when the spec does not declare one.
+ */
+export function getQueryLimitMaximum(path: string, method: string): number | undefined {
+  const spec = getSpec();
+  const op = (spec.paths as Record<string, Record<string, unknown>>)[path]?.[method.toLowerCase()] as Record<string, unknown> | undefined;
+  const params = op?.['parameters'] as Array<Record<string, unknown>> | undefined;
+  const limit = params?.find(p => p['in'] === 'query' && p['name'] === 'limit');
+  const schema = limit?.['schema'] as Record<string, unknown> | undefined;
+  const maximum = schema?.['maximum'];
+  return typeof maximum === 'number' ? maximum : undefined;
+}
+
+/**
  * Returns a specific named example from the spec, or the first example if name is not found.
  * Returns null if no examples exist.
  */

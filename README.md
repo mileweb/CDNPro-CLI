@@ -119,6 +119,27 @@ These options are available on every command:
 | `json` | Piped/non-TTY (default), and all non-list commands | Single JSON envelope |
 | `jsonl` | Explicit `--output jsonl` | One JSON object per line (streaming) |
 
+### Pagination and `--all`
+
+List commands accept `--limit <n>` and `--offset <n>`. `--all` walks every page and emits
+JSONL:
+
+- `--limit` sets the page size (default 100 with `--all`, 10 otherwise). It is validated against
+  the API's declared maximum and rejected with exit code 4 if it exceeds it.
+- `--offset` is the starting offset (default 0).
+- `--max-pages <n>` bounds the number of requests (default 10, maximum 50; exit code 4 outside
+  that range). It requires `--all`.
+- Pages advance by the number of items actually returned. A short page does not end pagination;
+  an empty page does.
+- `--all` always emits JSONL; combining it with `--output table` or `--output json` is an error
+  (exit code 4).
+- If `--max-pages` is reached while more data may exist, a warning is written to stderr and the
+  process exits with code **11 (INCOMPLETE)** after streaming the pages it fetched. Increase
+  `--max-pages` or narrow the filters to get a complete result.
+- `admin apicall list` uses cursor pagination (`before`): it starts from `--before` when supplied
+  and continues from the last item's `apiRequestId`. A missing or non-advancing cursor is an
+  error (exit code 1).
+
 ## Commands
 
 ### Properties

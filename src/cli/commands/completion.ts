@@ -207,37 +207,37 @@ _cdnpro() {
     case "$cmd" in
       property)
         case "$sub" in
-          list)    flags="--search --target --has-config --sort-by --sort-order --limit --offset --all --report-range";;
+          list)    flags="--search --target --has-config --sort-by --sort-order --limit --offset --all --max-pages --report-range";;
           create)  flags="--file --example";;
           update)  flags="--file --example --if-unmodified-since";;
           delete)  flags="--confirm";;
         esac;;
       property-version)
         case "$sub" in
-          list)   flags="--search --sort-by --sort-order --limit --offset --all";;
+          list)   flags="--search --sort-by --sort-order --limit --offset --all --max-pages";;
           create) flags="--file --example";;
           update) flags="--file --example --if-unmodified-since";;
         esac;;
       cert)
         case "$sub" in
-          list)   flags="--search --target --ca-only --auto-renew --sort-by --sort-order --limit --offset --all --report-range";;
+          list)   flags="--search --target --ca-only --auto-renew --sort-by --sort-order --limit --offset --all --max-pages --report-range";;
           create) flags="--name --cert --key --ca --self-signed --common-name --san --country --state --city --company --department --email --comments --ca-only --file --example";;
           update) flags="--name --cert --key --ca --self-signed --common-name --san --country --state --city --company --department --email --comments --ca-only --file --example";;
           download-csr) flags="--dcv --out";;
         esac;;
       deploy)
         case "$sub" in
-          list)   flags="--from --to --target --status --property --cert --search --task-ids --sort-by --sort-order --limit --offset --all --report-range";;
+          list)   flags="--from --to --target --status --property --cert --search --task-ids --sort-by --sort-order --limit --offset --all --max-pages --report-range";;
           create) flags="--target --deploy-property --remove-property --deploy-cert --remove-cert --name --webhook --file --wait --timeout --poll-interval --skip-certificate-check --skip-client-ca-certificate-check --skip-origin-auth-certificate-check --skip-usage-check --example";;
         esac;;
       validation)
         case "$sub" in
-          list)   flags="--from --to --property --property-version --status --search --sort-by --sort-order --limit --offset --all --report-range";;
+          list)   flags="--from --to --property --property-version --status --search --sort-by --sort-order --limit --offset --all --max-pages --report-range";;
           create) flags="--file --wait --timeout --poll-interval";;
         esac;;
       edge-hostname)
         case "$sub" in
-          list)          flags="--search --has-beian --server-groups --sort-by --sort-order --limit --offset --all --report-range";;
+          list)          flags="--search --has-beian --server-groups --sort-by --sort-order --limit --offset --all --max-pages --report-range";;
           create)        flags="--file --example";;
           update|replace) flags="--file --if-unmodified-since";;
           delete)        flags="--skip-usage-check";;
@@ -245,14 +245,14 @@ _cdnpro() {
       purge)
         case "$sub" in
           create)  flags="--target --url --dir --regex --header --action --name --webhook --file --wait --timeout --poll-interval --example";;
-          list)    flags="--from --to --target --action --search --sort-by --sort-order --max-success-rate --limit --offset --all --report-range";;
+          list)    flags="--from --to --target --action --search --sort-by --sort-order --max-success-rate --limit --offset --all --max-pages --report-range";;
           summary) flags="--from --to --target";;
           tokens)  flags="--target";;
         esac;;
       prefetch)
         case "$sub" in
           create) flags="--name --url --region --start-time --webhook --file --example --wait --timeout --poll-interval";;
-          list)   flags="--from --to --search --sort-by --sort-order --limit --offset --all --report-range";;
+          list)   flags="--from --to --search --sort-by --sort-order --limit --offset --all --max-pages --report-range";;
           tokens) flags="--target";;
         esac;;
       report)
@@ -263,46 +263,46 @@ _cdnpro() {
         esac;;
       log-config)
         case "$sub" in
-          list)   flags="--search --limit --offset --all --report-range";;
+          list)   flags="--search --limit --offset --all --max-pages --report-range";;
           create) flags="--file";;
           update) flags="--file --if-unmodified-since";;
         esac;;
       log-aggregation-point)
         case "$sub" in
-          list)   flags="--search --limit --offset --all";;
+          list)   flags="--search --limit --offset --all --max-pages";;
           create) flags="--file";;
           update) flags="--file --if-unmodified-since";;
         esac;;
       annotation)
         case "$sub" in
-          list)   flags="--from --to --type --search --limit --offset --all --report-range";;
+          list)   flags="--from --to --type --search --limit --offset --all --max-pages --report-range";;
           create) flags="--file --example";;
           update) flags="--file --example";;
         esac;;
       hostname)
         case "$sub" in
-          list)    flags="--search --target --limit --offset --all --report-range";;
+          list)    flags="--search --target --limit --offset --all --max-pages --report-range";;
         esac;;
       hostname-history)
         case "$sub" in
-          list) flags="--from --to --search --target --limit --offset --all --report-range";;
+          list) flags="--from --to --search --target --limit --offset --all --max-pages --report-range";;
           get)  flags="--from --to --target";;
         esac;;
       webhook)
         case "$sub" in
-          list)   flags="--limit --offset --all --report-range";;
+          list)   flags="--limit --offset --all --max-pages --report-range";;
           create) flags="--file";;
           update) flags="--file --if-unmodified-since";;
         esac;;
       secret)
         case "$sub" in
-          list)   flags="--search --limit --offset --all";;
+          list)   flags="--search --limit --offset --all --max-pages";;
           create) flags="--file";;
           update) flags="--file --if-unmodified-since";;
         esac;;
       service-quota)
         case "$sub" in
-          list)   flags="--search --status --allow-production --advanced-features --limit --offset --all --report-range";;
+          list)   flags="--search --status --allow-production --advanced-features --limit --offset --all --max-pages --report-range";;
           update) flags="--file --if-unmodified-since";;
         esac;;
       api-permission)
@@ -321,22 +321,22 @@ _cdnpro() {
         case "$sub" in
           customer)
             case "$subsub" in
-              list)         flags="--search --ids --status --products --check-history-product --regional-offices --sort-by --sort-order --limit --offset --all";;
+              list)         flags="--search --ids --status --products --check-history-product --regional-offices --sort-by --sort-order --limit --offset --all --max-pages";;
               create|update) flags="--file --example";;
             esac;;
           contact)
             case "$subsub" in
-              list)         flags="--search --ids --status --is-master --sort-by --sort-order --limit --offset --all --report-range";;
+              list)         flags="--search --ids --status --is-master --sort-by --sort-order --limit --offset --all --max-pages --report-range";;
               create|update) flags="--file --example";;
             esac;;
           api-account)
             case "$subsub" in
-              list)         flags="--search --type --sort-by --sort-order --limit --offset --all --report-range";;
+              list)         flags="--search --type --sort-by --sort-order --limit --offset --all --max-pages --report-range";;
               create|update) flags="--file --example";;
             esac;;
           apicall)
             case "$subsub" in
-              list) flags="--from --to --method --path --safe --caller --for-customer --status --before --limit --all --report-range";;
+              list) flags="--from --to --method --path --safe --caller --for-customer --status --before --limit --all --max-pages --report-range";;
               counts) flags="--from --to --path --by-me-only";;
             esac;;
         esac;;
@@ -869,34 +869,34 @@ Register-ArgumentCompleter -Native -CommandName @('cdnpro') -ScriptBlock {
   if ($wordToComplete -like '-*') {
     $global = @('-p','--profile','--host','--user','--secret-key','-o','--output','--no-color','-v','--verbose','--on-behalf-of')
     $flags = switch ("$cmd/$sub") {
-      'property/list'           { @('--search','--target','--has-config','--sort-by','--sort-order','--limit','--offset','--all','--report-range') }
+      'property/list'           { @('--search','--target','--has-config','--sort-by','--sort-order','--limit','--offset','--all','--max-pages','--report-range') }
       'property/create'         { @('--file','--example') }
       'property/update'         { @('--file','--example','--if-unmodified-since') }
       'property/delete'         { @('--confirm') }
-      'property-version/list'   { @('--search','--sort-by','--sort-order','--limit','--offset','--all') }
+      'property-version/list'   { @('--search','--sort-by','--sort-order','--limit','--offset','--all','--max-pages') }
       'property-version/create' { @('--file','--example') }
       'property-version/update' { @('--file','--example','--if-unmodified-since') }
-      'hostname/list'           { @('--search','--target','--limit','--offset','--all','--report-range') }
-      'hostname-history/list'   { @('--from','--to','--search','--target','--limit','--offset','--all','--report-range') }
+      'hostname/list'           { @('--search','--target','--limit','--offset','--all','--max-pages','--report-range') }
+      'hostname-history/list'   { @('--from','--to','--search','--target','--limit','--offset','--all','--max-pages','--report-range') }
       'hostname-history/get'    { @('--from','--to','--target') }
       'update/'                 { @('--check','--yes') }
-      'cert/list'               { @('--search','--target','--ca-only','--auto-renew','--sort-by','--sort-order','--limit','--offset','--all','--report-range') }
+      'cert/list'               { @('--search','--target','--ca-only','--auto-renew','--sort-by','--sort-order','--limit','--offset','--all','--max-pages','--report-range') }
       { $_ -in 'cert/create','cert/update' } { @('--name','--cert','--key','--ca','--self-signed','--common-name','--san','--country','--state','--city','--company','--department','--email','--comments','--ca-only','--file','--example') }
       'cert/download-csr'       { @('--dcv','--out') }
-      'deploy/list'             { @('--from','--to','--target','--status','--property','--cert','--search','--task-ids','--sort-by','--sort-order','--limit','--offset','--all','--report-range') }
+      'deploy/list'             { @('--from','--to','--target','--status','--property','--cert','--search','--task-ids','--sort-by','--sort-order','--limit','--offset','--all','--max-pages','--report-range') }
       'deploy/create'           { @('--target','--deploy-property','--remove-property','--deploy-cert','--remove-cert','--name','--webhook','--file','--wait','--timeout','--poll-interval','--skip-certificate-check','--skip-client-ca-certificate-check','--skip-origin-auth-certificate-check','--skip-usage-check','--example') }
-      'validation/list'         { @('--from','--to','--property','--property-version','--status','--search','--sort-by','--sort-order','--limit','--offset','--all','--report-range') }
+      'validation/list'         { @('--from','--to','--property','--property-version','--status','--search','--sort-by','--sort-order','--limit','--offset','--all','--max-pages','--report-range') }
       'validation/create'       { @('--file','--wait','--timeout','--poll-interval') }
-      'edge-hostname/list'      { @('--search','--has-beian','--server-groups','--sort-by','--sort-order','--limit','--offset','--all','--report-range') }
+      'edge-hostname/list'      { @('--search','--has-beian','--server-groups','--sort-by','--sort-order','--limit','--offset','--all','--max-pages','--report-range') }
       { $_ -in 'edge-hostname/create' } { @('--file','--example') }
       { $_ -in 'edge-hostname/update','edge-hostname/replace' } { @('--file','--if-unmodified-since') }
       'edge-hostname/delete'    { @('--skip-usage-check') }
       'purge/create'            { @('--target','--url','--dir','--regex','--header','--action','--name','--webhook','--file','--wait','--timeout','--poll-interval','--example') }
-      'purge/list'              { @('--from','--to','--target','--action','--search','--sort-by','--sort-order','--max-success-rate','--limit','--offset','--all','--report-range') }
+      'purge/list'              { @('--from','--to','--target','--action','--search','--sort-by','--sort-order','--max-success-rate','--limit','--offset','--all','--max-pages','--report-range') }
       'purge/summary'           { @('--from','--to','--target') }
       'purge/tokens'            { @('--target') }
       'prefetch/create'         { @('--name','--url','--region','--start-time','--webhook','--file','--example','--wait','--timeout','--poll-interval') }
-      'prefetch/list'           { @('--from','--to','--search','--sort-by','--sort-order','--limit','--offset','--all','--report-range') }
+      'prefetch/list'           { @('--from','--to','--search','--sort-by','--sort-order','--limit','--offset','--all','--max-pages','--report-range') }
       'prefetch/tokens'         { @('--target') }
       'report/logs'             { @('--from','--to','--hostname','--file') }
       { $sub -like '*-summary'  } { @('--from','--to','--scheme','--hostname','--property','--property-hostname','--server-group','--group-by','--file') }

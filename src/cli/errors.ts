@@ -12,6 +12,7 @@ export const EXIT_CODES = {
   TIMEOUT: 8,
   CONFIG_ERROR: 9,
   PRECONDITION_FAILED: 10,
+  INCOMPLETE: 11,
 } as const;
 
 export type ExitCodeKey = keyof typeof EXIT_CODES;

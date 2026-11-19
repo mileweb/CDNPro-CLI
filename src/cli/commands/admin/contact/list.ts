@@ -2,13 +2,15 @@ import { Command } from 'commander';
 import { resolveCredentials, GlobalOptions } from '../../../config';
 import { CDNProClient } from '../../../../client/CDNProClient';
 import { printJson, printTable, printJsonl, buildMeta, OutputFormat } from '../../../output';
-import { handleError, CliError } from '../../../errors';
+import { handleError } from '../../../errors';
+import { resolveListPaging, paginateOffset } from '../../../paginate';
 import {
   OptionMapping,
   SORT_OPTIONS,
   PAGINATION_OPTIONS,
   REPORT_RANGE,
   ALL,
+  MAX_PAGES,
   registerOptionsFromMapping,
   buildRequestFromMapping,
   registerMappings,
@@ -23,6 +25,7 @@ export const CONTACT_LIST_OPTIONS: OptionMapping[] = [
   ...PAGINATION_OPTIONS,
   REPORT_RANGE,
   ALL,
+  MAX_PAGES,
 ];
 
 export function registerAdminContactListCommand(parent: Command): void {
@@ -31,39 +34,33 @@ export function registerAdminContactListCommand(parent: Command): void {
     .description('List contacts');
 
   registerOptionsFromMapping(cmd, CONTACT_LIST_OPTIONS);
-  registerMappings('contact', 'list', CONTACT_LIST_OPTIONS);
+  registerMappings('admin-contact', 'list', CONTACT_LIST_OPTIONS);
 
   cmd.action(async (opts: Record<string, unknown>, cmdObj: Command) => {
     try {
       const globals = cmdObj.optsWithGlobals<GlobalOptions>();
-      const serverInfo = await resolveCredentials(globals);
-      const client = new CDNProClient(serverInfo);
       const fmt = globals.output as OutputFormat | undefined;
 
       const { query, reqOptions } = buildRequestFromMapping(opts, CONTACT_LIST_OPTIONS);
 
-      if (opts.all) {
-        const limit = 100;
-        let offset = 0;
-        while (true) {
-          const data = await client.contacts.list({ ...query, limit, offset }, reqOptions);
-          const { items } = buildMeta(data);
-          if (items.length === 0) break;
-          printJsonl(items);
-          if (items.length < limit) break;
-          offset += limit;
-        }
+      const paging = resolveListPaging(opts, {
+        resource: 'admin-contact',
+        operation: 'list',
+        output: fmt,
+      });
+
+      const serverInfo = await resolveCredentials(globals);
+      const client = new CDNProClient(serverInfo);
+
+      if (paging.all) {
+        await paginateOffset(
+          (limit, offset) => client.contacts.list({ ...query, limit, offset }, reqOptions),
+          paging,
+        );
         return;
       }
 
-      const limit = parseInt(String(opts.limit ?? '10'), 10);
-      if (isNaN(limit) || limit < 1) {
-        throw new CliError('VALIDATION', `--limit must be a positive integer, got: ${opts.limit}`);
-      }
-      const offset = parseInt(String(opts.offset ?? '0'), 10);
-      if (isNaN(offset) || offset < 0) {
-        throw new CliError('VALIDATION', `--offset must be a non-negative integer, got: ${opts.offset}`);
-      }
+      const { limit, offset } = paging;
       const data = await client.contacts.list(
         { ...query, limit, offset },
         reqOptions,
