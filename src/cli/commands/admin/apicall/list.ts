@@ -43,7 +43,7 @@ export function registerAdminApiCallListCommand(parent: Command): void {
       const globals = cmdObj.optsWithGlobals<GlobalOptions>();
       const fmt = globals.output as OutputFormat | undefined;
 
-      const { query, reqOptions } = buildRequestFromMapping(opts, APICALL_LIST_OPTIONS);
+      const { query, reqOptions } = buildRequestFromMapping(opts, APICALL_LIST_OPTIONS, globals);
 
       const paging = resolveCursorPaging(opts, {
         resource: 'admin-apicall',

@@ -96,6 +96,27 @@ Credentials are stored securely:
   - macOS: `~/Library/Preferences/cdnpro-nodejs/config.json`
   - Windows: `%APPDATA%\cdnpro-nodejs\Config\config.json`
 
+### Handling secrets in request bodies
+
+Create/update bodies for certificates, certificate versions, secrets, webhooks, contacts, and admin
+accounts can contain sensitive values (private keys, secret text, API keys, PII). The CLI limits
+incidental exposure, but it cannot hide a payload from a caller running under the same OS account.
+
+- Prefer `--file -` to read the body from stdin, e.g. `cdnpro secret create --file - < secret.json`,
+  so the plaintext need not be written to disk.
+- If you use a file, restrict it: `chmod 600 secret.json`. The CLI does not check file
+  permissions; securing the file is the caller's responsibility. (Windows ACLs work the same way
+  but are not inspected either.)
+- Never pass secrets as command-line arguments or environment variables: argv and environment are
+  visible to other processes (`ps`, `/proc/<pid>/environ`) and often to shell history.
+- `-v`/`-vv` diagnostics go to **stderr**, so they never corrupt piped JSON. `-vv` redacts the
+  `Authorization` header and sensitive body fields (`privateKey`, `secret`, `secretKey`, `apiKey`,
+  passwords, tokens, PEM private keys). Redaction is best-effort — still treat logs as sensitive.
+- Success response bodies are never written to the diagnostic log.
+- For AI agents and other automation, run the CLI under a separate OS account, or through a
+  wrapper/credential broker, that can read the secret while the agent cannot. A same-user agent can
+  read any file the CLI can read; the CLI cannot enforce that boundary.
+
 ## Global Options
 
 These options are available on every command:
@@ -108,7 +129,7 @@ These options are available on every command:
 | `--secret-key <key>` | Override API secret key |
 | `-o, --output <format>` | Output format: `table`, `json`, or `jsonl` |
 | `--no-color` | Disable colored output |
-| `-v, --verbose` | Increase verbosity (`-vv` for more) |
+| `-v, --verbose` | Increase verbosity (`-vv` prints redacted HTTP diagnostics to stderr) |
 | `--on-behalf-of <id>` | Reseller: act on behalf of a customer |
 
 ## Output Formats

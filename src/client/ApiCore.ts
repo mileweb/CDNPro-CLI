@@ -2,6 +2,7 @@ import * as https from 'https';
 import * as http from 'http';
 import * as zlib from 'zlib';
 import * as crypto from 'crypto';
+import { formatForLog } from './redact';
 
 export interface ServerInfo {
   host: string;
@@ -57,6 +58,14 @@ interface ApiError extends Error {
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
   return v != null && typeof v === 'object' && !Array.isArray(v);
+}
+
+/**
+ * Verbose diagnostics are written to stderr so they never corrupt piped data
+ * output, and payloads are redacted so credentials do not reach logs.
+ */
+function verboseLog(message: string): void {
+  process.stderr.write(message + '\n');
 }
 
 function encodeQuery(query: Record<string, string | number | boolean | string[]>): string {
@@ -216,9 +225,9 @@ export class ApiCore {
 
     if (options.verbose > 1) {
       const portPart = options.port ? `:${options.port}` : '';
-      console.log(options.method, `${schemeStr}://${options.hostname}${portPart}${options.path}`);
-      console.log(options.headers);
-      if (body) console.log(body, '\n');
+      verboseLog(`${options.method} ${schemeStr}://${options.hostname}${portPart}${options.path}`);
+      verboseLog(formatForLog(options.headers));
+      if (body) verboseLog(formatForLog(body) + '\n');
     }
 
     const doRequest = (): Promise<RawResponse> => new Promise((resolve, reject) => {
@@ -232,7 +241,10 @@ export class ApiCore {
             (res.socket as unknown as tls.TLSSocket).getPeerCertificate?.();
         }
 
-        const statusOk = res.statusCode === 200 || res.statusCode === 201 || res.statusCode === 204;
+        const statusOk =
+          typeof res.statusCode === 'number' &&
+          res.statusCode >= 200 &&
+          res.statusCode < 300;
 
         let uncomp: zlib.Gunzip | zlib.BrotliDecompress | null = null;
         const ce = res.headers['content-encoding'];
@@ -250,11 +262,11 @@ export class ApiCore {
           if (options.verbose > 0) {
             const headerSec = (hdrTime - stime) / 1000;
             const totalSec = (resTime - stime) / 1000;
-            console.log(
+            verboseLog(
               `hdrTime ${headerSec}s, total ${totalSec}s, got status ${res.statusCode} w/ ${len} => ${data.length} bytes from ${options.method} ${options.hostname}${options.path}`,
             );
             if (options.verbose > 1 && statusOk === false) {
-              console.log(data);
+              verboseLog(formatForLog(data));
             }
           }
 
@@ -334,7 +346,7 @@ export class ApiCore {
       const code = (err as NodeJS.ErrnoException).code;
       if (code === 'ECONNRESET' || code === 'EPIPE') {
         if (options.verbose > 0) {
-          console.log(`Socket error (${code}), retrying with fresh connection…`);
+          verboseLog(`Socket error (${code}), retrying with fresh connection…`);
         }
         this._resetAgents();
         options.agent = (options.scheme === 'http' ? this._agents!.http : this._agents!.https);

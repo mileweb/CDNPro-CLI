@@ -40,7 +40,7 @@ export function registerPrefetchListCommand(parent: Command): void {
       const globals = cmdObj.optsWithGlobals<GlobalOptions>();
       const fmt = globals.output as OutputFormat | undefined;
 
-      const { query, reqOptions } = buildRequestFromMapping(opts, PREFETCH_LIST_OPTIONS);
+      const { query, reqOptions } = buildRequestFromMapping(opts, PREFETCH_LIST_OPTIONS, globals);
 
       const paging = resolveListPaging(opts, {
         resource: 'prefetch',

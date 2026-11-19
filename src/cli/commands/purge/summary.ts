@@ -31,7 +31,7 @@ export function registerPurgeSummaryCommand(parent: Command): void {
       const client = new CDNProClient(serverInfo);
       const fmt = globals.output as OutputFormat | undefined;
 
-      const { query } = buildRequestFromMapping(opts, PURGE_SUMMARY_OPTIONS);
+      const { query } = buildRequestFromMapping(opts, PURGE_SUMMARY_OPTIONS, globals);
 
       const reqOptions = {
         ...(globals.onBehalfOf ? { onBehalfOf: globals.onBehalfOf } : {}),

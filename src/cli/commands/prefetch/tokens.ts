@@ -29,7 +29,7 @@ export function registerPrefetchTokensCommand(parent: Command): void {
       const client = new CDNProClient(serverInfo);
       const fmt = globals.output as OutputFormat | undefined;
 
-      const { query } = buildRequestFromMapping(opts, PREFETCH_TOKENS_OPTIONS);
+      const { query } = buildRequestFromMapping(opts, PREFETCH_TOKENS_OPTIONS, globals);
 
       const reqOptions = {
         ...(globals.onBehalfOf ? { onBehalfOf: globals.onBehalfOf } : {}),

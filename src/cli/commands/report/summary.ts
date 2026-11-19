@@ -72,7 +72,7 @@ export function registerSummaryReportCommand(
       const globals = cmdObj.optsWithGlobals<GlobalOptions>();
 
       let body: unknown;
-      const { query, reqOptions: mappedReqOptions, body: builtBody } = buildRequestFromMapping(opts, options);
+      const { query, reqOptions: mappedReqOptions, body: builtBody } = buildRequestFromMapping(opts, options, globals);
 
       if (opts.file) {
         body = readBodyFile(opts.file as string);

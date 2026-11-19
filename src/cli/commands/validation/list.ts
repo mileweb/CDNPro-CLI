@@ -43,7 +43,7 @@ export function registerValidationListCommand(parent: Command): void {
       const globals = cmdObj.optsWithGlobals<GlobalOptions>();
       const fmt = globals.output as OutputFormat | undefined;
 
-      const { query, reqOptions } = buildRequestFromMapping(opts, VALIDATION_LIST_OPTIONS);
+      const { query, reqOptions } = buildRequestFromMapping(opts, VALIDATION_LIST_OPTIONS, globals);
 
       const paging = resolveListPaging(opts, {
         resource: 'validation',

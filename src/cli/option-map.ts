@@ -129,10 +129,17 @@ export function registerOptionsFromMapping(cmd: Command, mappings: OptionMapping
   }
 }
 
+/** Global options that apply to the request rather than the mapped command flags. */
+export interface RequestGlobals {
+  onBehalfOf?: string;
+  verbose?: number;
+}
+
 /** Build { query, reqOptions, body } from parsed Commander opts. */
 export function buildRequestFromMapping(
   opts: Record<string, unknown>,
   mappings: OptionMapping[],
+  globals?: RequestGlobals,
 ): {
   query: Record<string, unknown>;
   reqOptions: Record<string, unknown>;
@@ -141,6 +148,9 @@ export function buildRequestFromMapping(
   const query: Record<string, unknown> = {};
   const reqOptions: Record<string, unknown> = {};
   let bodyObj: Record<string, unknown> | null = null;
+
+  if (globals?.onBehalfOf != null) reqOptions.onBehalfOf = globals.onBehalfOf;
+  if (globals?.verbose) reqOptions.verbose = globals.verbose;
 
   for (const m of mappings) {
     if (m.target === 'cli-only' || m.param === null) continue;
