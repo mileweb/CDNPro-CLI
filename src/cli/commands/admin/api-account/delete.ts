@@ -12,7 +12,7 @@ interface DeleteOpts {
 }
 
 export function registerAdminApiAccountDeleteCommand(parent: Command): void {
-  registerMappings('api-account', 'delete', ADMIN_API_ACCOUNT_DELETE_OPTIONS);
+  registerMappings('admin-api-account', 'delete', ADMIN_API_ACCOUNT_DELETE_OPTIONS);
 
   const cmd = parent
     .command('delete <id>')

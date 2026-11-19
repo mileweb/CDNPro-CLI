@@ -77,3 +77,42 @@ test('parameters not declared by the spec are forwarded unchanged', () => {
   const { query } = buildRequestFromMapping({ foo: 'anything' }, unknown, { output: 'json' });
   assert.equal(query.notARealParam, 'anything');
 });
+
+const dateFrom: OptionMapping[] = [
+  { flag: '--from <date>', target: 'query', param: 'startdate', description: '' },
+];
+registerMappings('deploy', 'list', dateFrom);
+
+test('rejects a malformed date-time query value', () => {
+  const { out, error } = runCapturing(() =>
+    buildRequestFromMapping({ from: '2026-01-31' }, dateFrom, { output: 'json' }));
+
+  assert.ok(error instanceof CliError);
+  assert.equal(error.code, 'VALIDATION');
+
+  const envelope = JSON.parse(out);
+  assert.equal(envelope.error.validationErrors[0].keyword, 'format');
+  assert.equal(envelope.error.validationErrors[0].path, 'query.startdate');
+  assert.equal(envelope.error.validationErrors[0].cliFlag, '--from');
+});
+
+test('accepts an RFC 3339 date-time query value', () => {
+  const { query } = buildRequestFromMapping(
+    { from: '2026-01-31T00:00:00Z' },
+    dateFrom,
+    { output: 'json' },
+  );
+  assert.equal(query.startdate, '2026-01-31T00:00:00Z');
+});
+
+test('rejects apicall relative dates — the spec requires date-time', () => {
+  const apicallDate: OptionMapping[] = [
+    { flag: '--from <date>', target: 'query', param: 'startdate', description: '' },
+  ];
+  registerMappings('admin-apicall', 'list', apicallDate);
+
+  const { error } = runCapturing(() =>
+    buildRequestFromMapping({ from: '7d' }, apicallDate, { output: 'json' }));
+  assert.ok(error instanceof CliError);
+  assert.equal(error.code, 'VALIDATION');
+});

@@ -1,5 +1,6 @@
 import Ajv, { ErrorObject } from 'ajv';
 import { getRequestBodySchema } from './loader';
+import { isRfc3339DateTime } from './date-time';
 
 export interface ValidationResult {
   valid: boolean;
@@ -14,6 +15,7 @@ function getAjv(): Ajv {
     // coerceTypes lets flag-built bodies (which are always strings) satisfy
     // numeric/boolean schema types, e.g. --property-version "3" → 3.
     _ajv = new Ajv({ allErrors: true, strict: false, coerceTypes: true });
+    _ajv.addFormat('date-time', { type: 'string', validate: isRfc3339DateTime });
   }
   return _ajv;
 }

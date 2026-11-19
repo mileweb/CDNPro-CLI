@@ -117,6 +117,31 @@ export interface ParameterEnum {
   values: string[];
 }
 
+/** Resolved schema for a declared query/header parameter. */
+function getParameterSchema(
+  path: string,
+  method: string,
+  location: 'query' | 'header',
+  name: string,
+): Record<string, unknown> | undefined {
+  const spec = getSpec();
+  const op = (spec.paths as Record<string, Record<string, unknown>>)[path]?.[method.toLowerCase()] as Record<string, unknown> | undefined;
+  const params = op?.['parameters'] as Array<Record<string, unknown>> | undefined;
+  const param = params?.find(p => p['in'] === location && p['name'] === name);
+  if (!param) return undefined;
+  return resolveSchemaRef(param['schema'] as Record<string, unknown> | undefined);
+}
+
+/** True when the operation declares this query/header parameter. */
+export function isParameterDeclared(
+  path: string,
+  method: string,
+  location: 'query' | 'header',
+  name: string,
+): boolean {
+  return getParameterSchema(path, method, location, name) !== undefined;
+}
+
 /**
  * Returns the enum constraint for a declared query/header parameter, or
  * undefined when the operation does not declare the parameter or the spec
@@ -128,13 +153,7 @@ export function getParameterEnum(
   location: 'query' | 'header',
   name: string,
 ): ParameterEnum | undefined {
-  const spec = getSpec();
-  const op = (spec.paths as Record<string, Record<string, unknown>>)[path]?.[method.toLowerCase()] as Record<string, unknown> | undefined;
-  const params = op?.['parameters'] as Array<Record<string, unknown>> | undefined;
-  const param = params?.find(p => p['in'] === location && p['name'] === name);
-  if (!param) return undefined;
-
-  const schema = resolveSchemaRef(param['schema'] as Record<string, unknown> | undefined);
+  const schema = getParameterSchema(path, method, location, name);
   if (!schema) return undefined;
 
   const type = typeof schema['type'] === 'string' ? schema['type'] as string : undefined;
@@ -146,6 +165,17 @@ export function getParameterEnum(
 
   if (!Array.isArray(values)) return undefined;
   return { type, values: values.map(String) };
+}
+
+/** Returns the schema-declared `format` for a query/header parameter. */
+export function getParameterFormat(
+  path: string,
+  method: string,
+  location: 'query' | 'header',
+  name: string,
+): string | undefined {
+  const schema = getParameterSchema(path, method, location, name);
+  return typeof schema?.['format'] === 'string' ? schema['format'] as string : undefined;
 }
 
 

@@ -132,9 +132,10 @@ These options are available on every command:
 | `-v, --verbose` | Increase verbosity (`-vv` prints redacted HTTP diagnostics to stderr) |
 | `--on-behalf-of <id>` | Reseller: act on behalf of a customer |
 
-Enumerated option values (e.g. `--target`, `--status`, `--action`) are validated against the
-OpenAPI spec before the request is sent. An invalid value exits with code 4 and lists the accepted
-values.
+Enumerated option values (e.g. `--target`, `--status`, `--action`) and date-time options (e.g.
+`--from`, `--to`, `--start-time`) are validated against the OpenAPI spec before the request is
+sent. Date-times must be RFC 3339 with a timezone. An invalid value exits with code 4 and lists the
+accepted values or expected format.
 
 ## Output Formats
 

@@ -12,7 +12,7 @@ interface DeleteOpts {
 }
 
 export function registerAdminContactDeleteCommand(parent: Command): void {
-  registerMappings('contact', 'delete', ADMIN_CONTACT_DELETE_OPTIONS);
+  registerMappings('admin-contact', 'delete', ADMIN_CONTACT_DELETE_OPTIONS);
 
   const cmd = parent
     .command('delete <id>')

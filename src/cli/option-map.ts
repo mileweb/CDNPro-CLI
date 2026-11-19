@@ -1,7 +1,8 @@
 import { Command } from 'commander';
 import { CliError } from './errors';
 import { lookupOperation } from '../schema/query';
-import { getParameterEnum } from '../schema/loader';
+import { getParameterEnum, getParameterFormat } from '../schema/loader';
+import { isRfc3339DateTime } from '../schema/date-time';
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -51,7 +52,7 @@ export const IF_UNMODIFIED_SINCE: OptionMapping = {
   flag: '--if-unmodified-since <date>',
   target: 'header',
   param: 'If-Unmodified-Since',
-  description: 'Fail if resource has been modified since this RFC 1123 date',
+  description: 'Fail if resource has been modified since this date (HTTP-date or RFC 3339)',
 };
 
 export const CONFIRM: OptionMapping = {
@@ -183,7 +184,7 @@ export function buildRequestFromMapping(
 
   const target = mappingOperations.get(mappings);
   if (target) {
-    const violations = findEnumViolations(
+    const violations = findOptionViolations(
       target.resource,
       target.operation,
       mappings,
@@ -191,41 +192,43 @@ export function buildRequestFromMapping(
       reqOptions,
     );
     if (violations.length > 0) {
-      emitEnumViolations(violations, target.resource, target.operation, globals?.output);
+      emitOptionViolations(violations, target.resource, target.operation, globals?.output);
     }
   }
 
   return { query, reqOptions, body: bodyObj };
 }
 
-// ── Schema-driven enum validation ─────────────────────────────────
+// ── Schema-driven value validation ────────────────────────────────
 // registerMappings associates each option array with its API operation, so
-// buildRequestFromMapping can reject invalid enumerated values without every
-// command passing the operation explicitly.
+// buildRequestFromMapping can reject invalid enumerated or date-time values
+// without every command passing the operation explicitly.
 const mappingOperations = new WeakMap<
   OptionMapping[],
   { resource: string; operation: string }
 >();
 
-interface EnumViolation {
+interface OptionViolation {
   cliFlag: string;
   location: 'query' | 'header';
   param: string;
   value: string;
-  allowed: string[];
+  keyword: 'enum' | 'format';
+  message: string;
+  allowedValues?: string[];
 }
 
-function findEnumViolations(
+function findOptionViolations(
   resource: string,
   operation: string,
   mappings: OptionMapping[],
   query: Record<string, unknown>,
   reqOptions: Record<string, unknown>,
-): EnumViolation[] {
+): OptionViolation[] {
   const entry = lookupOperation(resource, operation);
   if (!entry) return [];
 
-  const violations: EnumViolation[] = [];
+  const violations: OptionViolation[] = [];
   for (const m of mappings) {
     if (m.target !== 'query' && m.target !== 'header') continue;
     if (!m.param) continue;
@@ -236,21 +239,33 @@ function findEnumViolations(
     if (raw === undefined || raw === null || raw === '') continue;
 
     const constraint = getParameterEnum(entry.path, entry.method, m.target, m.param);
-    if (!constraint) continue;
+    const format = getParameterFormat(entry.path, entry.method, m.target, m.param);
+    if (!constraint && format !== 'date-time') continue;
 
     // Query arrays are encoded comma-separated; repeatable flags arrive as arrays.
-    const values = constraint.type === 'array'
+    const values = constraint?.type === 'array'
       ? (Array.isArray(raw) ? raw.map(String) : String(raw).split(','))
       : [String(raw)];
 
     for (const value of values) {
-      if (!constraint.values.includes(value)) {
+      if (constraint && !constraint.values.includes(value)) {
         violations.push({
           cliFlag: flagToCliFlag(m.flag),
           location: m.target,
           param: m.param,
           value,
-          allowed: constraint.values,
+          keyword: 'enum',
+          message: `must be one of: ${constraint.values.join(', ')}`,
+          allowedValues: constraint.values,
+        });
+      } else if (format === 'date-time' && !isRfc3339DateTime(value)) {
+        violations.push({
+          cliFlag: flagToCliFlag(m.flag),
+          location: m.target,
+          param: m.param,
+          value,
+          keyword: 'format',
+          message: 'must be an RFC 3339 date-time with a timezone (e.g. 2026-01-31T00:00:00Z)',
         });
       }
     }
@@ -258,8 +273,8 @@ function findEnumViolations(
   return violations;
 }
 
-function emitEnumViolations(
-  violations: EnumViolation[],
+function emitOptionViolations(
+  violations: OptionViolation[],
   resource: string,
   operation: string,
   output?: string,
@@ -267,16 +282,15 @@ function emitEnumViolations(
   const isHuman = output == null ? !!process.stdout.isTTY : output === 'table';
   const message = violations.length === 1
     ? `Invalid value for ${violations[0].cliFlag}`
-    : `Invalid values for ${violations.length} enumerated options`;
+    : `Invalid values for ${violations.length} options`;
+  const hint = `Run \`cdnpro schema ${resource} ${operation}\` to see accepted values`;
 
   if (isHuman) {
     process.stderr.write(`Error: ${message}\n`);
     for (const v of violations) {
-      process.stderr.write(
-        `  - ${v.cliFlag} "${v.value}": must be one of: ${v.allowed.join(', ')}\n`,
-      );
+      process.stderr.write(`  - ${v.cliFlag} "${v.value}": ${v.message}\n`);
     }
-    process.stderr.write(`\nTip: run \`cdnpro schema ${resource} ${operation}\` to see accepted values\n`);
+    process.stderr.write(`\nTip: ${hint}\n`);
   } else {
     const envelope = {
       error: {
@@ -284,12 +298,12 @@ function emitEnumViolations(
         message,
         validationErrors: violations.map(v => ({
           path: `${v.location}.${v.param}`,
-          message: `must be one of: ${v.allowed.join(', ')}`,
-          keyword: 'enum',
-          params: { allowedValues: v.allowed },
+          message: v.message,
+          keyword: v.keyword,
+          params: v.allowedValues ? { allowedValues: v.allowedValues } : { format: 'date-time' },
           cliFlag: v.cliFlag,
         })),
-        hint: `Run \`cdnpro schema ${resource} ${operation}\` to see accepted values`,
+        hint,
       },
     };
     process.stdout.write(JSON.stringify(envelope, null, 2) + '\n');
@@ -348,4 +362,20 @@ export function getMappings(
   operation: string,
 ): OptionMapping[] | undefined {
   return mappingRegistry.get(`${resource}.${operation}`);
+}
+
+/** All registered operation mappings, for schema-audit tests. */
+export function getAllMappings(): Array<{
+  resource: string;
+  operation: string;
+  mappings: OptionMapping[];
+}> {
+  return [...mappingRegistry.entries()].map(([key, mappings]) => {
+    const dot = key.indexOf('.');
+    return {
+      resource: key.slice(0, dot),
+      operation: key.slice(dot + 1),
+      mappings,
+    };
+  });
 }

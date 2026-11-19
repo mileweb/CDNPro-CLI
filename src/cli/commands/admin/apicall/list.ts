@@ -15,13 +15,13 @@ import {
 } from '../../../option-map';
 
 export const APICALL_LIST_OPTIONS: OptionMapping[] = [
-  { flag: '--from <date>',          target: 'query', param: 'startdate',   description: 'Start date (RFC 3339 UTC or relative: 7d, 24H, 1M)' },
-  { flag: '--to <date>',            target: 'query', param: 'enddate',     description: 'End date (RFC 3339 UTC or relative)' },
+  { flag: '--from <date>',          target: 'query', param: 'startdate',   description: 'Start date (RFC 3339 UTC with timezone)' },
+  { flag: '--to <date>',            target: 'query', param: 'enddate',     description: 'End date (RFC 3339 UTC with timezone)' },
   { flag: '--method <method>',      target: 'query', param: 'method',      description: 'Filter by HTTP method: GET | POST | PATCH | PUT | DELETE' },
   { flag: '--path <uri>',           target: 'query', param: 'path',        description: 'Filter by API path' },
   { flag: '--safe <bool>',          target: 'query', param: 'safe',        description: 'Filter by safe flag: true | false' },
   { flag: '--caller <name-or-id>',  target: 'query', param: 'caller',      description: 'Filter by API account name or ID' },
-  { flag: '--for-customer <id>',    target: 'query', param: 'forCustomer', description: 'Filter by on-behalf-of customer: customer ID | none | any' },
+  { flag: '--for-customer <id>',    target: 'query', param: 'onbehalfof', description: 'Filter by on-behalf-of customer: customer ID | none | any' },
   { flag: '--status <code,...>',    target: 'query', param: 'status',      description: 'Filter by HTTP status codes or patterns (2xx, 4xx, etc.)' },
   { flag: '--before <apiRequestId>', target: 'query', param: 'before',     description: 'Cursor for pagination: return calls before this request ID' },
   { flag: '--limit <n>',            target: 'query', param: 'limit',       description: 'Page size [default: 100, max: 100]' },

@@ -2,7 +2,7 @@ import { Command } from 'commander';
 import { resolveCredentials, GlobalOptions } from '../../config';
 import { CDNProClient } from '../../../client/CDNProClient';
 import { handleError } from '../../errors';
-import { readBodyFile, emitValidationError, checkRequiredOption } from '../../util';
+import { readBodyFile, emitValidationError, checkRequiredOption, normalizeIfUnmodifiedSince } from '../../util';
 import { getExampleBody } from '../../../schema/synthesize';
 import { validateBody } from '../../../schema/validate';
 import { OptionMapping, FILE_EXAMPLE, IF_UNMODIFIED_SINCE, registerOptionsFromMapping, registerMappings } from '../../option-map';
@@ -44,7 +44,7 @@ export function registerPropertyUpdateCommand(parent: Command): void {
         ...(globals.onBehalfOf ? { onBehalfOf: globals.onBehalfOf } : {}),
         ...(globals.verbose ? { verbose: globals.verbose } : {}),
         ...(opts.ifUnmodifiedSince
-          ? { headers: { 'If-Unmodified-Since': opts.ifUnmodifiedSince } }
+          ? { headers: { 'If-Unmodified-Since': normalizeIfUnmodifiedSince(opts.ifUnmodifiedSince as string) } }
           : {}),
       };
 

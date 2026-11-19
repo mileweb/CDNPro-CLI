@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import { CliError } from './errors';
 import { OptionMapping, flagForBodyPath } from './option-map';
 import { validateBody, ValidationResult } from '../schema/validate';
+import { toHttpDate } from '../schema/date-time';
 
 /**
  * Read a JSON body from a file path or stdin ("-").
@@ -125,6 +126,25 @@ export function parseIntegerOption(value: string, flagName: string): number {
     throw new CliError('VALIDATION', `${flagName} must be an integer, got: ${value}`);
   }
   return parsed;
+}
+
+/**
+ * Normalize --if-unmodified-since for the HTTP header. Accepts an HTTP-date
+ * (as returned by the API's Last-Modified) or an RFC 3339 date-time, which is
+ * converted to the equivalent UTC HTTP-date. Exits 4 on anything else.
+ */
+export function normalizeIfUnmodifiedSince(value: string): string {
+  const normalized = toHttpDate(value);
+  if (!normalized) {
+    throw new CliError(
+      'VALIDATION',
+      '--if-unmodified-since must be an HTTP-date ' +
+        '(e.g. "Thu, 01 Jan 2026 00:00:00 GMT") or an RFC 3339 date-time ' +
+        '(e.g. "2026-01-01T00:00:00Z")',
+      { cliFlag: '--if-unmodified-since' },
+    );
+  }
+  return normalized;
 }
 
 /**

@@ -17,8 +17,8 @@ import {
 } from '../../option-map';
 
 export const PURGE_LIST_OPTIONS: OptionMapping[] = [
-  { flag: '--from <date>',             target: 'query', param: 'startDate',      description: 'Start date (RFC 3339 UTC)' },
-  { flag: '--to <date>',               target: 'query', param: 'endDate',        description: 'End date (RFC 3339 UTC)' },
+  { flag: '--from <date>',             target: 'query', param: 'startdate',      description: 'Start date (RFC 3339 UTC)' },
+  { flag: '--to <date>',               target: 'query', param: 'enddate',        description: 'End date (RFC 3339 UTC)' },
   { flag: '--target <env>',            target: 'query', param: 'target',         description: 'Filter by environment: staging | production' },
   { flag: '--action <action>',         target: 'query', param: 'action',         description: 'Filter by purge action: invalidate | delete' },
   { flag: '--search <term>',           target: 'query', param: 'search',         description: 'Match on hostname or purge task ID' },
