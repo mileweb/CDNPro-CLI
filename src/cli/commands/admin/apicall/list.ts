@@ -2,11 +2,13 @@ import { Command } from 'commander';
 import { resolveCredentials, GlobalOptions } from '../../../config';
 import { CDNProClient } from '../../../../client/CDNProClient';
 import { printJson, printTable, printJsonl, buildMeta, OutputFormat } from '../../../output';
-import { handleError, CliError } from '../../../errors';
+import { handleError } from '../../../errors';
+import { resolveCursorPaging, paginateCursor } from '../../../paginate';
 import {
   OptionMapping,
   REPORT_RANGE,
   ALL,
+  MAX_PAGES,
   registerOptionsFromMapping,
   buildRequestFromMapping,
   registerMappings,
@@ -25,6 +27,7 @@ export const APICALL_LIST_OPTIONS: OptionMapping[] = [
   { flag: '--limit <n>',            target: 'query', param: 'limit',       description: 'Page size [default: 100, max: 100]' },
   REPORT_RANGE,
   ALL,
+  MAX_PAGES,
 ];
 
 export function registerAdminApiCallListCommand(parent: Command): void {
@@ -38,40 +41,36 @@ export function registerAdminApiCallListCommand(parent: Command): void {
   cmd.action(async (opts: Record<string, unknown>, cmdObj: Command) => {
     try {
       const globals = cmdObj.optsWithGlobals<GlobalOptions>();
-      const serverInfo = await resolveCredentials(globals);
-      const client = new CDNProClient(serverInfo);
       const fmt = globals.output as OutputFormat | undefined;
 
       const { query, reqOptions } = buildRequestFromMapping(opts, APICALL_LIST_OPTIONS);
 
-      const limit = parseInt(String(opts.limit ?? '100'), 10);
-      if (isNaN(limit) || limit < 1) {
-        throw new CliError('VALIDATION', `--limit must be a positive integer, got: ${opts.limit}`);
-      }
+      const paging = resolveCursorPaging(opts, {
+        resource: 'admin-apicall',
+        operation: 'list',
+        output: fmt,
+      });
 
-      if (opts.all) {
-        let before: string | undefined;
-        while (true) {
-          const pageQuery = { ...query, limit, ...(before ? { before } : {}) };
-          const data = await client.apiCalls.list(pageQuery, reqOptions);
-          const { items } = buildMeta(data);
-          if (items.length === 0) break;
-          printJsonl(items);
-          if (items.length < limit) break;
-          // Use the last item's apiRequestId as the cursor
-          const last = items[items.length - 1] as Record<string, unknown>;
-          before = last['apiRequestId'] as string | undefined;
-          if (!before) break;
-        }
+      const serverInfo = await resolveCredentials(globals);
+      const client = new CDNProClient(serverInfo);
+
+      if (paging.all) {
+        await paginateCursor(
+          (cursor, limit) => client.apiCalls.list(
+            { ...query, limit, ...(cursor ? { before: cursor } : {}) },
+            reqOptions,
+          ),
+          paging,
+        );
         return;
       }
 
-      const pageQuery: Record<string, unknown> = { ...query, limit };
-      if (opts.before) pageQuery['before'] = opts.before;
+      const pageQuery: Record<string, unknown> = { ...query, limit: paging.limit };
+      if (paging.before) pageQuery['before'] = paging.before;
 
       const data = await client.apiCalls.list(pageQuery, reqOptions);
       const { items, meta } = buildMeta(data);
-      meta.limit = limit;
+      meta.limit = paging.limit;
 
       const effectiveFmt = fmt ?? (process.stdout.isTTY ? 'table' : 'json');
       if (effectiveFmt === 'table') {

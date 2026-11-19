@@ -2,11 +2,13 @@ import { Command } from 'commander';
 import { resolveCredentials, GlobalOptions } from '../../config';
 import { CDNProClient } from '../../../client/CDNProClient';
 import { printJson, printTable, printJsonl, buildMeta, OutputFormat } from '../../output';
-import { handleError, CliError } from '../../errors';
+import { handleError } from '../../errors';
+import { resolveListPaging, paginateOffset } from '../../paginate';
 import {
   OptionMapping,
   REPORT_RANGE,
   ALL,
+  MAX_PAGES,
   registerOptionsFromMapping,
   buildRequestFromMapping,
   registerMappings,
@@ -23,6 +25,7 @@ export const ANNOTATION_LIST_OPTIONS: OptionMapping[] = [
   { flag: '--offset <n>',    target: 'query', param: 'offset',    description: 'Page offset' },
   REPORT_RANGE,
   ALL,
+  MAX_PAGES,
 ];
 
 export function registerAnnotationListCommand(parent: Command): void {
@@ -36,49 +39,37 @@ export function registerAnnotationListCommand(parent: Command): void {
   cmd.action(async (opts: Record<string, unknown>, cmdObj: Command) => {
     try {
       const globals = cmdObj.optsWithGlobals<GlobalOptions>();
+      const fmt = globals.output as OutputFormat | undefined;
 
       const { query, reqOptions } = buildRequestFromMapping(opts, ANNOTATION_LIST_OPTIONS);
 
-      const limit = opts.all
-        ? 100
-        : parseInt(String(opts.limit ?? '10'), 10);
-      if (!opts.all && (isNaN(limit) || limit < 1)) {
-        throw new CliError('VALIDATION', `--limit must be a positive integer, got: ${opts.limit}`);
-      }
-      const startOffset = opts.all
-        ? 0
-        : parseInt(String(opts.offset ?? '0'), 10);
-      if (!opts.all && (isNaN(startOffset) || startOffset < 0)) {
-        throw new CliError('VALIDATION', `--offset must be a non-negative integer, got: ${opts.offset}`);
-      }
+      const paging = resolveListPaging(opts, {
+        resource: 'annotation',
+        operation: 'list',
+        output: fmt,
+      });
 
       const serverInfo = await resolveCredentials(globals);
       const client = new CDNProClient(serverInfo);
-      const fmt = globals.output as OutputFormat | undefined;
 
-      if (opts.all) {
-        let offset = startOffset;
-        while (true) {
-          const data = await client.annotations.list(
+      if (paging.all) {
+        await paginateOffset(
+          (limit, offset) => client.annotations.list(
             {},
             { ...reqOptions, query: { ...query, limit, offset } },
-          );
-          const { items } = buildMeta(data);
-          if (items.length === 0) break;
-          printJsonl(items);
-          if (items.length < limit) break;
-          offset += limit;
-        }
+          ),
+          paging,
+        );
         return;
       }
 
       const data = await client.annotations.list(
         {},
-        { ...reqOptions, query: { ...query, limit, offset: startOffset } },
+        { ...reqOptions, query: { ...query, limit: paging.limit, offset: paging.offset } },
       );
       const { items, meta } = buildMeta(data);
-      meta.limit = limit;
-      meta.offset = startOffset;
+      meta.limit = paging.limit;
+      meta.offset = paging.offset;
 
       const effectiveFmt = fmt ?? (process.stdout.isTTY ? 'table' : 'json');
       if (effectiveFmt === 'table') {

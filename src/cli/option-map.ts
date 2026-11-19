@@ -68,6 +68,13 @@ export const ALL: OptionMapping = {
   boolean: true,
 };
 
+export const MAX_PAGES: OptionMapping = {
+  flag: '--max-pages <n>',
+  target: 'cli-only',
+  param: null,
+  description: 'Maximum pages for --all [default: 10, max: 50]',
+};
+
 // ── Flag helpers ───────────────────────────────────────────────────
 
 /** Extract the bare flag name from a Commander flag string.

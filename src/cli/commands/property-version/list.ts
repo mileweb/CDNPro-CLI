@@ -2,12 +2,14 @@ import { Command } from 'commander';
 import { resolveCredentials, GlobalOptions } from '../../config';
 import { CDNProClient } from '../../../client/CDNProClient';
 import { printJson, printTable, printJsonl, buildMeta, OutputFormat } from '../../output';
-import { handleError, CliError } from '../../errors';
+import { handleError } from '../../errors';
+import { resolveListPaging, paginateOffset } from '../../paginate';
 import {
   OptionMapping,
   SORT_OPTIONS,
   PAGINATION_OPTIONS,
   ALL,
+  MAX_PAGES,
   registerOptionsFromMapping,
   buildRequestFromMapping,
   registerMappings,
@@ -18,6 +20,7 @@ export const PROPERTY_VERSION_LIST_OPTIONS: OptionMapping[] = [
   ...SORT_OPTIONS,
   ...PAGINATION_OPTIONS,
   ALL,
+  MAX_PAGES,
 ];
 
 export function registerPropertyVersionListCommand(parent: Command): void {
@@ -31,38 +34,32 @@ export function registerPropertyVersionListCommand(parent: Command): void {
   cmd.action(async (propertyId: string, opts: Record<string, unknown>, cmdObj: Command) => {
     try {
       const globals = cmdObj.optsWithGlobals<GlobalOptions>();
-      const serverInfo = await resolveCredentials(globals);
-      const client = new CDNProClient(serverInfo);
       const fmt = globals.output as OutputFormat | undefined;
 
       const { query, reqOptions } = buildRequestFromMapping(opts, PROPERTY_VERSION_LIST_OPTIONS);
 
-      if (opts.all) {
-        const limit = 100;
-        let offset = 0;
-        while (true) {
-          const data = await client.properties.listVersions(
+      const paging = resolveListPaging(opts, {
+        resource: 'property-version',
+        operation: 'list',
+        output: fmt,
+      });
+
+      const serverInfo = await resolveCredentials(globals);
+      const client = new CDNProClient(serverInfo);
+
+      if (paging.all) {
+        await paginateOffset(
+          (limit, offset) => client.properties.listVersions(
             propertyId,
             { ...query, limit, offset } as Record<string, unknown>,
             reqOptions,
-          );
-          const { items } = buildMeta(data);
-          if (items.length === 0) break;
-          printJsonl(items);
-          if (items.length < limit) break;
-          offset += limit;
-        }
+          ),
+          paging,
+        );
         return;
       }
 
-      const limit = parseInt(String(opts.limit ?? '10'), 10);
-      if (isNaN(limit) || limit < 1) {
-        throw new CliError('VALIDATION', `--limit must be a positive integer, got: ${opts.limit}`);
-      }
-      const offset = parseInt(String(opts.offset ?? '0'), 10);
-      if (isNaN(offset) || offset < 0) {
-        throw new CliError('VALIDATION', `--offset must be a non-negative integer, got: ${opts.offset}`);
-      }
+      const { limit, offset } = paging;
       const data = await client.properties.listVersions(
         propertyId,
         { ...query, limit, offset } as Record<string, unknown>,
