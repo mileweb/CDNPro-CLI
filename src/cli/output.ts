@@ -72,10 +72,11 @@ export function printResult(
   data: unknown,
   format: OutputFormat | undefined,
   columns?: string[],
+  meta?: Record<string, unknown>,
 ): void {
   const fmt = format ?? 'json';
   switch (fmt) {
-    case 'json':  return printJson(data);
+    case 'json':  return printJson(data, meta);
     case 'jsonl': return printJsonl(data);
     case 'table': return printTable(data, columns);
   }
@@ -155,6 +156,33 @@ function formatCell(value: unknown): string {
   if (value === null || value === undefined) return chalk.dim('-');
   if (typeof value === 'object') return JSON.stringify(value);
   return String(value);
+}
+
+interface RawResponseLike {
+  obj: unknown;
+  ctx: { _res: { headers: Record<string, string | string[] | undefined> } };
+}
+
+function isRawResponse(v: unknown): v is RawResponseLike {
+  return typeof v === 'object' && v !== null && 'obj' in v && 'ctx' in v;
+}
+
+/**
+ * Unwrap a raw client response (`{ obj, ctx }`) and extract `Last-Modified`.
+ *
+ * Commands must pass `raw: true` to the client to receive headers. Endpoints
+ * that do not declare `Last-Modified` return `meta = {}`.
+ */
+export function unwrapRawResponse(
+  rsp: unknown,
+): { data: unknown; meta: Record<string, unknown> } {
+  const meta: Record<string, unknown> = {};
+  if (isRawResponse(rsp)) {
+    const lm = rsp.ctx._res.headers['last-modified'] ?? rsp.ctx._res.headers['Last-Modified'];
+    if (lm) meta.lastModified = Array.isArray(lm) ? lm[0] : lm;
+    return { data: rsp.obj, meta };
+  }
+  return { data: rsp, meta };
 }
 
 /**
