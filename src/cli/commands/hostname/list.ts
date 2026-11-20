@@ -16,7 +16,6 @@ import {
 } from '../../option-map';
 
 export const HOSTNAME_LIST_OPTIONS: OptionMapping[] = [
-  { flag: '--search <term>',   target: 'query', param: 'search', description: 'Keyword search' },
   { flag: '--target <target>', target: 'query', param: 'target', description: 'Filter by deployment target: all | staging | production' },
   ...PAGINATION_OPTIONS,
   REPORT_RANGE,

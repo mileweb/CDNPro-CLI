@@ -402,14 +402,14 @@ cdnpro edge-hostname delete <id>
 ### Hostnames
 
 ```bash
-cdnpro hostname list [--search <keyword>] [--target <all|staging|production>]
+cdnpro hostname list [--target <all|staging|production>]
                      [--limit <n>] [--offset <n>] [--report-range <scope>]
                      [--all]
 cdnpro hostname get <hostname>
 ```
 
 ```bash
-cdnpro hostname-history list [--search <keyword>] [--from <date>] [--to <date>] [--target <staging|production|all>] [--limit <n>] [--offset <n>] [--report-range <scope>] [--all]
+cdnpro hostname-history list [--search <keyword>] [--from <date>] [--to <date>] [--target <staging|production|all>] [--limit <n>] [--offset <n>] [--all]
 cdnpro hostname-history get <hostname> [--from <date>] [--to <date>] [--target <staging|production|all>]
 ```
 

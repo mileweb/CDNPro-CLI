@@ -7,7 +7,6 @@ import { resolveListPaging, paginateOffset } from '../../paginate';
 import {
   OptionMapping,
   PAGINATION_OPTIONS,
-  REPORT_RANGE,
   ALL,
   MAX_PAGES,
   registerOptionsFromMapping,
@@ -21,7 +20,6 @@ export const HOSTNAME_HISTORY_LIST_OPTIONS: OptionMapping[] = [
   { flag: '--search <term>',  target: 'query', param: 'search', description: 'Filter by hostname prefix' },
   { flag: '--target <target>', target: 'query', param: 'target', description: 'Filter by deployment target: staging | production | all' },
   ...PAGINATION_OPTIONS,
-  REPORT_RANGE,
   ALL,
   MAX_PAGES,
 ];

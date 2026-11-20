@@ -253,7 +253,6 @@ _cdnpro() {
         case "$sub" in
           create) flags="--name --url --region --start-time --webhook --file --example --wait --timeout --poll-interval";;
           list)   flags="--from --to --search --sort-by --sort-order --limit --offset --all --max-pages --report-range";;
-          tokens) flags="--target";;
         esac;;
       report)
         case "$sub" in
@@ -281,11 +280,11 @@ _cdnpro() {
         esac;;
       hostname)
         case "$sub" in
-          list)    flags="--search --target --limit --offset --all --max-pages --report-range";;
+          list)    flags="--target --limit --offset --all --max-pages --report-range";;
         esac;;
       hostname-history)
         case "$sub" in
-          list) flags="--from --to --search --target --limit --offset --all --max-pages --report-range";;
+          list) flags="--from --to --search --target --limit --offset --all --max-pages";;
           get)  flags="--from --to --target";;
         esac;;
       webhook)
@@ -876,8 +875,8 @@ Register-ArgumentCompleter -Native -CommandName @('cdnpro') -ScriptBlock {
       'property-version/list'   { @('--search','--sort-by','--sort-order','--limit','--offset','--all','--max-pages') }
       'property-version/create' { @('--file','--example') }
       'property-version/update' { @('--file','--example','--if-unmodified-since') }
-      'hostname/list'           { @('--search','--target','--limit','--offset','--all','--max-pages','--report-range') }
-      'hostname-history/list'   { @('--from','--to','--search','--target','--limit','--offset','--all','--max-pages','--report-range') }
+      'hostname/list'           { @('--target','--limit','--offset','--all','--max-pages','--report-range') }
+      'hostname-history/list'   { @('--from','--to','--search','--target','--limit','--offset','--all','--max-pages') }
       'hostname-history/get'    { @('--from','--to','--target') }
       'update/'                 { @('--check','--yes') }
       'cert/list'               { @('--search','--target','--ca-only','--auto-renew','--sort-by','--sort-order','--limit','--offset','--all','--max-pages','--report-range') }
@@ -897,7 +896,6 @@ Register-ArgumentCompleter -Native -CommandName @('cdnpro') -ScriptBlock {
       'purge/tokens'            { @('--target') }
       'prefetch/create'         { @('--name','--url','--region','--start-time','--webhook','--file','--example','--wait','--timeout','--poll-interval') }
       'prefetch/list'           { @('--from','--to','--search','--sort-by','--sort-order','--limit','--offset','--all','--max-pages','--report-range') }
-      'prefetch/tokens'         { @('--target') }
       'report/logs'             { @('--from','--to','--hostname','--file') }
       { $sub -like '*-summary'  } { @('--from','--to','--scheme','--hostname','--property','--property-hostname','--server-group','--group-by','--file') }
       { $cmd -eq 'report'       } { @('--from','--to','--type','--scheme','--hostname','--property','--property-hostname','--server-group','--file','--report-range') }

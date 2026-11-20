@@ -8,17 +8,6 @@ import { getResponseSchema, getSpec, isParameterDeclared } from '../schema/loade
 
 registerAllCommands(new Command());
 
-/**
- * Parameters the CLI sends that the current spec does not declare. Kept
- * deliberately because the API may support them; tracked as L-28 until the
- * spec is corrected or the flags are removed.
- */
-const KNOWN_SPEC_GAPS = new Set([
-  'prefetch.tokens query.target',
-  'hostname.list query.search',
-  'hostname-history.list header.Report-Range',
-]);
-
 /** List operations that return more than one top-level array of items. */
 const MULTI_ARRAY_LISTS = new Set([
   'public-ip.list',
@@ -36,7 +25,6 @@ test('every mapped query/header parameter is declared by its operation', () => {
     for (const m of mappings) {
       if (m.target !== 'query' && m.target !== 'header') continue;
       if (!m.param) continue;
-      if (KNOWN_SPEC_GAPS.has(`${resource}.${operation} ${m.target}.${m.param}`)) continue;
       if (!isParameterDeclared(entry.path, entry.method, m.target, m.param)) {
         problems.push(
           `${resource}.${operation}: ${m.flag} maps to undeclared ` +
