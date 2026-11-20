@@ -193,10 +193,16 @@ export function unwrapRawResponse(
  * For single-object responses, sets `single` and leaves `items` empty — the
  * caller should render `single` directly (e.g. via `printTable`) rather than
  * treating it as a one-element list.
+ *
+ * When the response contains more than one top-level array, `itemsKey` must
+ * name the array that holds the list items; otherwise this throws rather than
+ * silently picking one. (The IP-range reference lists merge their arrays in
+ * {@link buildIpRangeList} instead.)
  */
 export function buildMeta(
   rawData: unknown,
   headers?: Record<string, string | string[] | undefined>,
+  itemsKey?: string,
 ): { items: unknown[]; meta: Record<string, unknown>; single?: unknown } {
   // CDN Pro list responses are plain arrays; total may come from a header.
   let items: unknown[] = [];
@@ -208,8 +214,23 @@ export function buildMeta(
     const obj = rawData as Record<string, unknown>;
     // CDN Pro list responses wrap results in a resource-specific array key,
     // e.g. { properties: [...], count: N } or { certificates: [...] }.
-    // Find the first value that is an array.
-    const arrayKey = Object.keys(obj).find(k => Array.isArray(obj[k]));
+    let arrayKey: string | undefined;
+    if (itemsKey !== undefined) {
+      if (!Array.isArray(obj[itemsKey])) {
+        throw new Error(`Response does not contain an array named "${itemsKey}"`);
+      }
+      arrayKey = itemsKey;
+    } else {
+      const arrayKeys = Object.keys(obj).filter(k => Array.isArray(obj[k]));
+      if (arrayKeys.length > 1) {
+        throw new Error(
+          `Response contains multiple top-level arrays (${arrayKeys.join(', ')}); ` +
+          `cannot determine which one holds the list items`,
+        );
+      }
+      arrayKey = arrayKeys[0];
+    }
+
     if (arrayKey !== undefined) {
       items = obj[arrayKey] as unknown[];
       // Most list endpoints include a count field; apicalls uses hasMore instead.
@@ -230,4 +251,34 @@ export function buildMeta(
   }
 
   return { items, meta };
+}
+
+export interface IpRangeItem {
+  ip: string;
+  version: 4 | 6;
+}
+
+/**
+ * Merge the `ipV4` and `ipV6` arrays returned by `/cdn/publicIpList` and
+ * `/cdn/originFastRouteIpList` into a single item list, preserving the
+ * response's `lastUpdated` and `effectiveDate` in `meta`.
+ */
+export function buildIpRangeList(
+  rawData: unknown,
+): { items: IpRangeItem[]; meta: Record<string, unknown> } {
+  const obj = (rawData ?? {}) as Record<string, unknown>;
+  const ipV4 = Array.isArray(obj.ipV4) ? obj.ipV4.map(String) : [];
+  const ipV6 = Array.isArray(obj.ipV6) ? obj.ipV6.map(String) : [];
+
+  const meta: Record<string, unknown> = {};
+  if (obj.lastUpdated !== undefined) meta.lastUpdated = obj.lastUpdated;
+  if (obj.effectiveDate !== undefined) meta.effectiveDate = obj.effectiveDate;
+
+  return {
+    items: [
+      ...ipV4.map(ip => ({ ip, version: 4 as const })),
+      ...ipV6.map(ip => ({ ip, version: 6 as const })),
+    ],
+    meta,
+  };
 }

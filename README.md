@@ -486,6 +486,9 @@ cdnpro origin-fast-route-ip list      # Origin fast-route IPs
 cdnpro ip-details lookup --file <path>            # IP geolocation details
 ```
 
+`public-ip list` and `origin-fast-route-ip list` merge IPv4 and IPv6 ranges into
+`{ "ip": ..., "version": 4 | 6 }` items; `meta` carries `lastUpdated` and `effectiveDate`.
+
 ### Reports
 
 All report commands require `--from` and `--to` (RFC 3339 UTC dates).
