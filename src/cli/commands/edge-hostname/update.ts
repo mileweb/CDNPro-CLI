@@ -1,3 +1,4 @@
+import { printWriteResult } from '../../output';
 import { Command } from 'commander';
 import { resolveCredentials, GlobalOptions } from '../../config';
 import { CDNProClient } from '../../../client/CDNProClient';
@@ -55,11 +56,7 @@ export function registerEdgeHostnameUpdateCommand(parent: Command): void {
       };
 
       await client.edgeHostnames.update(name, body, reqOptions);
-      if (!process.stdout.isTTY || globals.output) {
-        process.stdout.write(JSON.stringify({ success: true }) + '\n');
-      } else {
-        process.stderr.write(`Edge hostname ${name} updated.\n`);
-      }
+      printWriteResult({ edgeHostname: name }, globals.output, `Edge hostname ${name} updated.\n`);
     } catch (err) {
       handleError(err);
     }

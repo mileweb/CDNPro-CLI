@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { CliError } from './errors';
+import { CliError, outputsHumanErrors } from './errors';
 import { lookupOperation } from '../schema/query';
 import { getParameterEnum, getParameterFormat } from '../schema/loader';
 import { isRfc3339DateTime } from '../schema/date-time';
@@ -279,7 +279,7 @@ function emitOptionViolations(
   operation: string,
   output?: string,
 ): never {
-  const isHuman = output == null ? !!process.stdout.isTTY : output === 'table';
+  const isHuman = outputsHumanErrors(output);
   const message = violations.length === 1
     ? `Invalid value for ${violations[0].cliFlag}`
     : `Invalid values for ${violations.length} options`;

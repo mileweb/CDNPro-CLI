@@ -1,3 +1,4 @@
+import { printWriteResult } from '../../output';
 import { Command } from 'commander';
 import * as readline from 'readline';
 import { resolveCredentials, GlobalOptions } from '../../config';
@@ -42,11 +43,7 @@ export function registerLogAggregationPointDeleteCommand(parent: Command): void 
 
       await client.logAggregationPoints.delete(id, reqOptions);
 
-      if (!process.stdout.isTTY || globals.output) {
-        process.stdout.write(JSON.stringify({ success: true, logAggregationPointId: id }) + '\n');
-      } else {
-        process.stderr.write(`Log aggregation point ${id} deleted.\n`);
-      }
+      printWriteResult({ logAggregationPointId: id }, globals.output, `Log aggregation point ${id} deleted.\n`);
     } catch (err) {
       handleError(err);
     }

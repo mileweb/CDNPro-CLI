@@ -1,3 +1,4 @@
+import { printWriteResult } from '../../output';
 import { Command } from 'commander';
 import { resolveCredentials, GlobalOptions } from '../../config';
 import { CDNProClient } from '../../../client/CDNProClient';
@@ -55,11 +56,7 @@ export function registerSecretUpdateCommand(parent: Command): void {
       };
 
       await client.secrets.update(id, body, reqOptions);
-      if (!process.stdout.isTTY || globals.output) {
-        process.stdout.write(JSON.stringify({ success: true }) + '\n');
-      } else {
-        process.stderr.write(`Secret ${id} updated.\n`);
-      }
+      printWriteResult({ secretId: id }, globals.output, `Secret ${id} updated.\n`);
     } catch (err) {
       handleError(err);
     }

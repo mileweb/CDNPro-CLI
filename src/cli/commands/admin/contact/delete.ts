@@ -1,3 +1,4 @@
+import { printWriteResult } from '../../../output';
 import { Command } from 'commander';
 import * as readline from 'readline';
 import { resolveCredentials, GlobalOptions } from '../../../config';
@@ -41,11 +42,7 @@ export function registerAdminContactDeleteCommand(parent: Command): void {
 
       await client.contacts.delete(id, reqOptions);
 
-      if (!process.stdout.isTTY || globals.output) {
-        process.stdout.write(JSON.stringify({ success: true, contactId: id }) + '\n');
-      } else {
-        process.stderr.write(`Contact ${id} deleted.\n`);
-      }
+      printWriteResult({ contactId: id }, globals.output, `Contact ${id} deleted.\n`);
     } catch (err) {
       handleError(err);
     }

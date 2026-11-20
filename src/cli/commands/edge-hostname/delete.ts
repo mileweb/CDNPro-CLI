@@ -1,3 +1,4 @@
+import { printWriteResult } from '../../output';
 import { Command } from 'commander';
 import * as readline from 'readline';
 import { resolveCredentials, GlobalOptions } from '../../config';
@@ -56,11 +57,7 @@ export function registerEdgeHostnameDeleteCommand(parent: Command): void {
 
       await client.edgeHostnames.delete(name, reqOptions);
 
-      if (!process.stdout.isTTY || globals.output) {
-        process.stdout.write(JSON.stringify({ success: true, edgeHostname: name }) + '\n');
-      } else {
-        process.stderr.write(`Edge hostname ${name} deleted.\n`);
-      }
+      printWriteResult({ edgeHostname: name }, globals.output, `Edge hostname ${name} deleted.\n`);
     } catch (err) {
       handleError(err);
     }

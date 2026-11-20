@@ -1,3 +1,4 @@
+import { printWriteResult } from '../../output';
 import { Command } from 'commander';
 import { resolveCredentials, GlobalOptions } from '../../config';
 import { CDNProClient } from '../../../client/CDNProClient';
@@ -51,11 +52,7 @@ export function registerWebhookUpdateCommand(parent: Command): void {
       };
 
       await client.webhooks.update(id, body, reqOptions);
-      if (!process.stdout.isTTY || globals.output) {
-        process.stdout.write(JSON.stringify({ success: true }) + '\n');
-      } else {
-        process.stderr.write(`Webhook ${id} updated.\n`);
-      }
+      printWriteResult({ webhookId: id }, globals.output, `Webhook ${id} updated.\n`);
     } catch (err) {
       handleError(err);
     }

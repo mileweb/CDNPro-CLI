@@ -1,3 +1,4 @@
+import { printWriteResult } from '../../output';
 import { Command } from 'commander';
 import * as readline from 'readline';
 import { resolveCredentials, GlobalOptions } from '../../config';
@@ -42,11 +43,7 @@ export function registerLogConfigDeleteCommand(parent: Command): void {
 
       await client.logConfigs.delete(id, reqOptions);
 
-      if (!process.stdout.isTTY || globals.output) {
-        process.stdout.write(JSON.stringify({ success: true, logConfigId: id }) + '\n');
-      } else {
-        process.stderr.write(`Log config ${id} deleted.\n`);
-      }
+      printWriteResult({ logConfigId: id }, globals.output, `Log config ${id} deleted.\n`);
     } catch (err) {
       handleError(err);
     }

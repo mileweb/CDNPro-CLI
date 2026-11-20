@@ -1,3 +1,4 @@
+import { printWriteResult } from '../../output';
 import { Command } from 'commander';
 import { resolveCredentials, GlobalOptions } from '../../config';
 import { CDNProClient } from '../../../client/CDNProClient';
@@ -50,11 +51,7 @@ export function registerPropertyUpdateCommand(parent: Command): void {
 
       await client.properties.update(id, body, reqOptions);
       // 204 No Content — emit a minimal success response
-      if (!process.stdout.isTTY || globals.output) {
-        process.stdout.write(JSON.stringify({ success: true }) + '\n');
-      } else {
-        process.stderr.write(`Property ${id} updated.\n`);
-      }
+      printWriteResult({ propertyId: id }, globals.output, `Property ${id} updated.\n`);
     } catch (err) {
       handleError(err);
     }

@@ -59,6 +59,23 @@ function httpStatusToCode(status: number | undefined): ExitCodeKey {
   }
 }
 
+let currentOutput: string | undefined;
+
+/** Record the parsed global --output value so error formatting can follow it. */
+export function setErrorOutput(output: string | undefined): void {
+  currentOutput = output;
+}
+
+/**
+ * Human-readable errors when the caller asked for table output, JSON errors
+ * for json/jsonl, and the TTY/piped default when no format was specified.
+ */
+export function outputsHumanErrors(output: string | undefined): boolean {
+  if (output === 'table') return true;
+  if (output === 'json' || output === 'jsonl') return false;
+  return !!process.stdout.isTTY;
+}
+
 function printError(payload: {
   code: ExitCodeKey;
   message: string;
@@ -66,7 +83,7 @@ function printError(payload: {
   body?: unknown;
   details?: unknown;
 }): void {
-  if (process.stdout.isTTY) {
+  if (outputsHumanErrors(currentOutput)) {
     process.stderr.write(chalk.red(`Error [${payload.code}]: ${payload.message}\n`));
     if (payload.body) {
       const bodyStr = typeof payload.body === 'string'

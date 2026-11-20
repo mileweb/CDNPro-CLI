@@ -1,3 +1,4 @@
+import { printWriteResult } from '../../output';
 import { Command } from 'commander';
 import { resolveCredentials, GlobalOptions } from '../../config';
 import { CDNProClient } from '../../../client/CDNProClient';
@@ -55,11 +56,7 @@ export function registerPropertyVersionUpdateCommand(parent: Command): void {
 
       await client.properties.patchVersion(propertyId, version, body, reqOptions);
 
-      if (!process.stdout.isTTY || globals.output) {
-        process.stdout.write(JSON.stringify({ success: true }) + '\n');
-      } else {
-        process.stderr.write(`Property ${propertyId} version ${version} updated.\n`);
-      }
+      printWriteResult({ propertyId, version }, globals.output, `Property ${propertyId} version ${version} updated.\n`);
     } catch (err) {
       handleError(err);
     }

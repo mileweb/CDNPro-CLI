@@ -127,7 +127,7 @@ These options are available on every command:
 | `--host <host>` | Override API host |
 | `--user <user>` | Override API username |
 | `--secret-key <key>` | Override API secret key |
-| `-o, --output <format>` | Output format: `table`, `json`, or `jsonl` |
+| `-o, --output <format>` | Output format: `table`, `json`, or `jsonl` (anything else exits 4) |
 | `--no-color` | Disable colored output |
 | `-v, --verbose` | Increase verbosity (`-vv` prints redacted HTTP diagnostics to stderr) |
 | `--on-behalf-of <id>` | Reseller: act on behalf of a customer |
@@ -144,6 +144,11 @@ accepted values or expected format.
 | `table` | `list` commands in interactive TTY (default) | Human-readable ASCII table |
 | `json` | Piped/non-TTY (default), and all non-list commands | Single JSON envelope |
 | `jsonl` | Explicit `--output jsonl` | One JSON object per line (streaming) |
+
+Machine output uses one top-level shape: `{"data": ...}` on success and `{"error": ...}` on
+failure. List/create/update/delete results all live under `data`; for writes it is
+`{"data": {"success": true, ...identifiers}}`, e.g. `.data.propertyId`. An interactive TTY without
+an explicit `--output` prints human messages to stderr instead.
 
 ### Pagination and `--all`
 

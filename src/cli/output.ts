@@ -83,9 +83,34 @@ export function printResult(
 }
 
 /**
+ * Build the JSON payload for a write success:
+ * `{"data":{"success":true,...fields}}`.
+ */
+export function writeResultData(fields: Record<string, unknown> = {}): string {
+  return JSON.stringify({ data: { success: true, ...fields } });
+}
+
+/**
+ * Emit a write success in the standard envelope.
+ * In TTY mode (no explicit format): `humanMessage` to stderr.
+ * In pipe / explicit format mode: `{"data":{"success":true,...}}` to stdout.
+ */
+export function printWriteResult(
+  fields: Record<string, unknown>,
+  format?: string,
+  humanMessage?: string,
+): void {
+  if (!process.stdout.isTTY || format) {
+    process.stdout.write(writeResultData(fields) + '\n');
+  } else if (humanMessage) {
+    process.stderr.write(humanMessage.endsWith('\n') ? humanMessage : humanMessage + '\n');
+  }
+}
+
+/**
  * Print a success message for resource creation.
  * In TTY mode (no explicit format): "Created new <label>: \"<id>\"." to stderr.
- * In pipe / explicit format mode: {"success":true,"<jsonKey>":"<id>"} to stdout.
+ * In pipe / explicit format mode: {"data":{"success":true,"<jsonKey>":"<id>"}}.
  */
 export function printCreateSuccess(
   label: string,
@@ -93,13 +118,7 @@ export function printCreateSuccess(
   id: string,
   format?: string,
 ): void {
-  if (!process.stdout.isTTY || format) {
-    const result: Record<string, unknown> = { success: true };
-    result[jsonKey] = id;
-    process.stdout.write(JSON.stringify(result) + '\n');
-  } else {
-    process.stderr.write(`Created new ${label}: "${id}".\n`);
-  }
+  printWriteResult({ [jsonKey]: id }, format, `Created new ${label}: "${id}".`);
 }
 
 export function printTable(data: unknown, columns?: string[]): void {

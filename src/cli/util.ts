@@ -1,5 +1,5 @@
 import * as fs from 'fs';
-import { CliError } from './errors';
+import { CliError, outputsHumanErrors } from './errors';
 import { OptionMapping, flagForBodyPath } from './option-map';
 import { validateBody, ValidationResult } from '../schema/validate';
 import { toHttpDate } from '../schema/date-time';
@@ -45,7 +45,7 @@ export function emitValidationError(
   mappings?: OptionMapping[],
 ): never {
   const errors = result.errors;
-  const isHuman = output == null ? process.stdout.isTTY : output === 'table';
+  const isHuman = outputsHumanErrors(output);
 
   if (isHuman) {
     process.stderr.write('Error: Invalid request body\n');
@@ -126,6 +126,19 @@ export function parseIntegerOption(value: string, flagName: string): number {
     throw new CliError('VALIDATION', `${flagName} must be an integer, got: ${value}`);
   }
   return parsed;
+}
+
+export const OUTPUT_FORMATS = ['table', 'json', 'jsonl'] as const;
+
+/** Reject unsupported --output values with exit code 4. */
+export function validateOutputOption(value: unknown): void {
+  if (value === undefined) return;
+  if (typeof value === 'string' && (OUTPUT_FORMATS as readonly string[]).includes(value)) return;
+  throw new CliError(
+    'VALIDATION',
+    `Invalid --output value: "${String(value)}". Allowed values: ${OUTPUT_FORMATS.join(', ')}`,
+    { cliFlag: '--output', allowedValues: OUTPUT_FORMATS },
+  );
 }
 
 /**

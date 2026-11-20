@@ -1,3 +1,4 @@
+import { printWriteResult } from '../../output';
 import { Command } from 'commander';
 import * as readline from 'readline';
 import { resolveCredentials, GlobalOptions } from '../../config';
@@ -42,11 +43,7 @@ export function registerWebhookDeleteCommand(parent: Command): void {
 
       await client.webhooks.delete(id, reqOptions);
 
-      if (!process.stdout.isTTY || globals.output) {
-        process.stdout.write(JSON.stringify({ success: true, webhookId: id }) + '\n');
-      } else {
-        process.stderr.write(`Webhook ${id} deleted.\n`);
-      }
+      printWriteResult({ webhookId: id }, globals.output, `Webhook ${id} deleted.\n`);
     } catch (err) {
       handleError(err);
     }

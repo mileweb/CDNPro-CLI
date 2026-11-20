@@ -52,7 +52,7 @@ export function registerEdgeHostnameCreateCommand(parent: Command): void {
       const data = enrichWithLocationId(raw);
       const id = data['id'] as string;
 
-      printCreateSuccess('Edge Hostname', 'edgeHostnameId', id, globals.output);
+      printCreateSuccess('Edge Hostname', 'edgeHostname', id, globals.output);
     } catch (err) {
       handleError(err);
     }

@@ -1,3 +1,4 @@
+import { printWriteResult } from '../../output';
 import { Command } from 'commander';
 import { resolveCredentials, GlobalOptions } from '../../config';
 import { CDNProClient } from '../../../client/CDNProClient';
@@ -55,11 +56,7 @@ export function registerLogConfigUpdateCommand(parent: Command): void {
       };
 
       await client.logConfigs.update(id, body, reqOptions);
-      if (!process.stdout.isTTY || globals.output) {
-        process.stdout.write(JSON.stringify({ success: true }) + '\n');
-      } else {
-        process.stderr.write(`Log config ${id} updated.\n`);
-      }
+      printWriteResult({ logConfigId: id }, globals.output, `Log config ${id} updated.\n`);
     } catch (err) {
       handleError(err);
     }

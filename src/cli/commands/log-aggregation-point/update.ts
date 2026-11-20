@@ -1,3 +1,4 @@
+import { printWriteResult } from '../../output';
 import { Command } from 'commander';
 import { resolveCredentials, GlobalOptions } from '../../config';
 import { CDNProClient } from '../../../client/CDNProClient';
@@ -55,11 +56,7 @@ export function registerLogAggregationPointUpdateCommand(parent: Command): void 
       };
 
       await client.logAggregationPoints.update(id, body, reqOptions);
-      if (!process.stdout.isTTY || globals.output) {
-        process.stdout.write(JSON.stringify({ success: true }) + '\n');
-      } else {
-        process.stderr.write(`Log aggregation point ${id} updated.\n`);
-      }
+      printWriteResult({ logAggregationPointId: id }, globals.output, `Log aggregation point ${id} updated.\n`);
     } catch (err) {
       handleError(err);
     }

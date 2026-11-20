@@ -1,3 +1,4 @@
+import { printWriteResult } from '../../../output';
 import { Command } from 'commander';
 import { resolveCredentials, GlobalOptions } from '../../../config';
 import { CDNProClient } from '../../../../client/CDNProClient';
@@ -48,11 +49,7 @@ export function registerAdminCustomerUpdateCommand(parent: Command): void {
       };
 
       await client.customers.update(id, body, reqOptions);
-      if (!process.stdout.isTTY || globals.output) {
-        process.stdout.write(JSON.stringify({ success: true }) + '\n');
-      } else {
-        process.stderr.write(`Customer ${id} updated.\n`);
-      }
+      printWriteResult({ customerId: id }, globals.output, `Customer ${id} updated.\n`);
     } catch (err) {
       handleError(err);
     }

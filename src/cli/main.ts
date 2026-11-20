@@ -2,6 +2,8 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
 import { registerAllCommands } from './register-commands';
+import { handleError, setErrorOutput } from './errors';
+import { validateOutputOption } from './util';
 import { scheduleUpdateCheck, printUpdateNotice, CURRENT_VERSION } from './updater';
 
 const program = new Command();
@@ -20,8 +22,16 @@ program
   .option('-v, --verbose', 'Increase verbosity (-vv for more)', (_, prev: number) => prev + 1, 0)
   .option('--on-behalf-of <id>', 'On-Behalf-Of customer ID (resellers only)')
   .hook('preAction', (_thisCmd, actionCmd) => {
+    const globals = actionCmd.optsWithGlobals();
+    try {
+      validateOutputOption(globals.output);
+    } catch (err) {
+      handleError(err);
+    }
+    setErrorOutput(globals.output as string | undefined);
+
     // Disable chalk colors if --no-color is set
-    if (actionCmd.optsWithGlobals().noColor) {
+    if (globals.noColor) {
       chalk.level = 0;
     }
     // Only real commands trigger the (cached, detached) update check —

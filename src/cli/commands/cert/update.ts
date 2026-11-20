@@ -5,6 +5,7 @@ import { resolveCredentials, GlobalOptions } from '../../config';
 import { CDNProClient } from '../../../client/CDNProClient';
 import { handleError } from '../../errors';
 import { CliError } from '../../errors';
+import { printWriteResult } from '../../output';
 import { readBodyFile, checkRequiredOption, validateRequestOrThrow } from '../../util';
 import { getCertExample } from './example';
 import {
@@ -86,11 +87,7 @@ interface UpdateOpts {
 }
 
 function emitUpdateSuccess(id: string, globals: GlobalOptions): void {
-  if (!process.stdout.isTTY || globals.output) {
-    process.stdout.write(JSON.stringify({ success: true }) + '\n');
-  } else {
-    process.stderr.write(`Certificate version added for ${id}.\n`);
-  }
+  printWriteResult({ certificateId: id }, globals.output, `Certificate version added for ${id}.`);
 }
 
 export function registerCertUpdateCommand(parent: Command): void {

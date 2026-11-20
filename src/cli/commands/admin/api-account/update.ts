@@ -1,3 +1,4 @@
+import { printWriteResult } from '../../../output';
 import { Command } from 'commander';
 import { resolveCredentials, GlobalOptions } from '../../../config';
 import { CDNProClient } from '../../../../client/CDNProClient';
@@ -48,11 +49,7 @@ export function registerAdminApiAccountUpdateCommand(parent: Command): void {
       };
 
       await client.apiAccounts.update(id, body, reqOptions);
-      if (!process.stdout.isTTY || globals.output) {
-        process.stdout.write(JSON.stringify({ success: true }) + '\n');
-      } else {
-        process.stderr.write(`API account ${id} updated.\n`);
-      }
+      printWriteResult({ apiAccountId: id }, globals.output, `API account ${id} updated.\n`);
     } catch (err) {
       handleError(err);
     }
