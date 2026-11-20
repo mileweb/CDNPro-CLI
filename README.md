@@ -96,6 +96,27 @@ Credentials are stored securely:
   - macOS: `~/Library/Preferences/cdnpro-nodejs/config.json`
   - Windows: `%APPDATA%\cdnpro-nodejs\Config\config.json`
 
+### Handling secrets in request bodies
+
+Create/update bodies for certificates, certificate versions, secrets, webhooks, contacts, and admin
+accounts can contain sensitive values (private keys, secret text, API keys, PII). The CLI limits
+incidental exposure, but it cannot hide a payload from a caller running under the same OS account.
+
+- Prefer `--file -` to read the body from stdin, e.g. `cdnpro secret create --file - < secret.json`,
+  so the plaintext need not be written to disk.
+- If you use a file, restrict it: `chmod 600 secret.json`. The CLI does not check file
+  permissions; securing the file is the caller's responsibility. (Windows ACLs work the same way
+  but are not inspected either.)
+- Never pass secrets as command-line arguments or environment variables: argv and environment are
+  visible to other processes (`ps`, `/proc/<pid>/environ`) and often to shell history.
+- `-v`/`-vv` diagnostics go to **stderr**, so they never corrupt piped JSON. `-vv` redacts the
+  `Authorization` header and sensitive body fields (`privateKey`, `secret`, `secretKey`, `apiKey`,
+  passwords, tokens, PEM private keys). Redaction is best-effort — still treat logs as sensitive.
+- Success response bodies are never written to the diagnostic log.
+- For AI agents and other automation, run the CLI under a separate OS account, or through a
+  wrapper/credential broker, that can read the secret while the agent cannot. A same-user agent can
+  read any file the CLI can read; the CLI cannot enforce that boundary.
+
 ## Global Options
 
 These options are available on every command:
@@ -106,10 +127,15 @@ These options are available on every command:
 | `--host <host>` | Override API host |
 | `--user <user>` | Override API username |
 | `--secret-key <key>` | Override API secret key |
-| `-o, --output <format>` | Output format: `table`, `json`, or `jsonl` |
+| `-o, --output <format>` | Output format: `table`, `json`, or `jsonl` (anything else exits 4) |
 | `--no-color` | Disable colored output |
-| `-v, --verbose` | Increase verbosity (`-vv` for more) |
+| `-v, --verbose` | Increase verbosity (`-vv` prints redacted HTTP diagnostics to stderr) |
 | `--on-behalf-of <id>` | Reseller: act on behalf of a customer |
+
+Enumerated option values (e.g. `--target`, `--status`, `--action`) and date-time options (e.g.
+`--from`, `--to`, `--start-time`) are validated against the OpenAPI spec before the request is
+sent. Date-times must be RFC 3339 with a timezone. An invalid value exits with code 4 and lists the
+accepted values or expected format.
 
 ## Output Formats
 
@@ -118,6 +144,11 @@ These options are available on every command:
 | `table` | `list` commands in interactive TTY (default) | Human-readable ASCII table |
 | `json` | Piped/non-TTY (default), and all non-list commands | Single JSON envelope |
 | `jsonl` | Explicit `--output jsonl` | One JSON object per line (streaming) |
+
+Machine output uses one top-level shape: `{"data": ...}` on success and `{"error": ...}` on
+failure. List/create/update/delete results all live under `data`; for writes it is
+`{"data": {"success": true, ...identifiers}}`, e.g. `.data.propertyId`. An interactive TTY without
+an explicit `--output` prints human messages to stderr instead.
 
 ### Pagination and `--all`
 
@@ -309,7 +340,7 @@ The `--wait` flag shows a spinner in a TTY and NDJSON progress lines when piped.
 ```bash
 cdnpro validation list [--from <date>] [--to <date>] [--property <id>]
                       [--property-version <version>]
-                      [--status <waiting|in-progress|failed|succeeded>]
+                      [--status <waiting|"in progress"|failed|succeeded>]
                       [--search <keyword>] [--sort-by <field>]
                       [--sort-order <asc|desc>] [--limit <n>] [--offset <n>]
                       [--report-range <scope>] [--all]
@@ -371,14 +402,14 @@ cdnpro edge-hostname delete <id>
 ### Hostnames
 
 ```bash
-cdnpro hostname list [--search <keyword>] [--target <all|staging|production>]
+cdnpro hostname list [--target <all|staging|production>]
                      [--limit <n>] [--offset <n>] [--report-range <scope>]
                      [--all]
 cdnpro hostname get <hostname>
 ```
 
 ```bash
-cdnpro hostname-history list [--search <keyword>] [--from <date>] [--to <date>] [--target <staging|production|all>] [--limit <n>] [--offset <n>] [--report-range <scope>] [--all]
+cdnpro hostname-history list [--search <keyword>] [--from <date>] [--to <date>] [--target <staging|production|all>] [--limit <n>] [--offset <n>] [--all]
 cdnpro hostname-history get <hostname> [--from <date>] [--to <date>] [--target <staging|production|all>]
 ```
 
@@ -459,6 +490,9 @@ cdnpro public-ip list                 # Public IPs
 cdnpro origin-fast-route-ip list      # Origin fast-route IPs
 cdnpro ip-details lookup --file <path>            # IP geolocation details
 ```
+
+`public-ip list` and `origin-fast-route-ip list` merge IPv4 and IPv6 ranges into
+`{ "ip": ..., "version": 4 | 6 }` items; `meta` carries `lastUpdated` and `effectiveDate`.
 
 ### Reports
 

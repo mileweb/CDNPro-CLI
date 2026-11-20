@@ -17,8 +17,8 @@ import {
 } from '../../option-map';
 
 export const DEPLOY_LIST_OPTIONS: OptionMapping[] = [
-  { flag: '--from <date>',       target: 'query', param: 'from',          description: 'Filter by submission time (start)' },
-  { flag: '--to <date>',         target: 'query', param: 'to',            description: 'Filter by submission time (end)' },
+  { flag: '--from <date>',       target: 'query', param: 'startdate',          description: 'Filter by submission time (start)' },
+  { flag: '--to <date>',         target: 'query', param: 'enddate',            description: 'Filter by submission time (end)' },
   { flag: '--target <target>',   target: 'query', param: 'target',        description: 'Filter by environment: staging | production' },
   { flag: '--status <status>',   target: 'query', param: 'status',        description: 'Filter by status: waiting | inprogress | failed | succeeded' },
   { flag: '--property <id>',     target: 'query', param: 'propertyId',    description: 'Filter by property ID' },
@@ -45,7 +45,7 @@ export function registerDeployListCommand(parent: Command): void {
       const globals = cmdObj.optsWithGlobals<GlobalOptions>();
       const fmt = globals.output as OutputFormat | undefined;
 
-      const { query, reqOptions } = buildRequestFromMapping(opts, DEPLOY_LIST_OPTIONS);
+      const { query, reqOptions } = buildRequestFromMapping(opts, DEPLOY_LIST_OPTIONS, globals);
 
       const paging = resolveListPaging(opts, {
         resource: 'deploy',

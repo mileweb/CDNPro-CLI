@@ -17,11 +17,11 @@ import {
 } from '../../option-map';
 
 export const VALIDATION_LIST_OPTIONS: OptionMapping[] = [
-  { flag: '--from <date>',               target: 'query', param: 'from',             description: 'Filter by submission time (start)' },
-  { flag: '--to <date>',                 target: 'query', param: 'to',               description: 'Filter by submission time (end)' },
+  { flag: '--from <date>',               target: 'query', param: 'startdate',             description: 'Filter by submission time (start)' },
+  { flag: '--to <date>',                 target: 'query', param: 'enddate',               description: 'Filter by submission time (end)' },
   { flag: '--property <id>',             target: 'query', param: 'propertyId',       description: 'Filter by property ID' },
   { flag: '--property-version <version>', target: 'query', param: 'propertyVersion', description: 'Filter by property version' },
-  { flag: '--status <status>',           target: 'query', param: 'status',           description: 'Filter by status: waiting | in-progress | failed | succeeded' },
+  { flag: '--status <status>',           target: 'query', param: 'status',           description: 'Filter by status: waiting | in progress | failed | succeeded' },
   { flag: '--search <term>',             target: 'query', param: 'search',           description: 'Keyword search' },
   ...SORT_OPTIONS,
   ...PAGINATION_OPTIONS,
@@ -43,7 +43,7 @@ export function registerValidationListCommand(parent: Command): void {
       const globals = cmdObj.optsWithGlobals<GlobalOptions>();
       const fmt = globals.output as OutputFormat | undefined;
 
-      const { query, reqOptions } = buildRequestFromMapping(opts, VALIDATION_LIST_OPTIONS);
+      const { query, reqOptions } = buildRequestFromMapping(opts, VALIDATION_LIST_OPTIONS, globals);
 
       const paging = resolveListPaging(opts, {
         resource: 'validation',

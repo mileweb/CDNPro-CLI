@@ -1,3 +1,4 @@
+import { printWriteResult } from '../../output';
 import { Command } from 'commander';
 import * as readline from 'readline';
 import { resolveCredentials, GlobalOptions } from '../../config';
@@ -45,11 +46,7 @@ export function registerPropertyVersionDeleteCommand(parent: Command): void {
 
       await client.properties.deleteVersion(propertyId, version, reqOptions);
 
-      if (!process.stdout.isTTY || globals.output) {
-        process.stdout.write(JSON.stringify({ success: true, propertyId, version }) + '\n');
-      } else {
-        process.stderr.write(`Property ${propertyId} version ${version} deleted.\n`);
-      }
+      printWriteResult({ propertyId, version }, globals.output, `Property ${propertyId} version ${version} deleted.\n`);
     } catch (err) {
       handleError(err);
     }

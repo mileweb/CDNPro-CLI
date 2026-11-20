@@ -1,3 +1,4 @@
+import { printWriteResult } from '../../output';
 import { Command } from 'commander';
 import * as readline from 'readline';
 import { resolveCredentials, GlobalOptions } from '../../config';
@@ -42,11 +43,7 @@ export function registerPropertyDeleteCommand(parent: Command): void {
 
       await client.properties.delete(id, reqOptions);
 
-      if (!process.stdout.isTTY || globals.output) {
-        process.stdout.write(JSON.stringify({ success: true, propertyId: id }) + '\n');
-      } else {
-        process.stderr.write(`Property ${id} deleted.\n`);
-      }
+      printWriteResult({ propertyId: id }, globals.output, `Property ${id} deleted.\n`);
     } catch (err) {
       handleError(err);
     }

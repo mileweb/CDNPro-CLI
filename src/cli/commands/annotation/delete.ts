@@ -1,3 +1,4 @@
+import { printWriteResult } from '../../output';
 import { Command } from 'commander';
 import * as readline from 'readline';
 import { resolveCredentials, GlobalOptions } from '../../config';
@@ -42,11 +43,7 @@ export function registerAnnotationDeleteCommand(parent: Command): void {
 
       await client.annotations.delete(id, reqOptions);
 
-      if (!process.stdout.isTTY || globals.output) {
-        process.stdout.write(JSON.stringify({ success: true, annotationId: id }) + '\n');
-      } else {
-        process.stderr.write(`Annotation ${id} deleted.\n`);
-      }
+      printWriteResult({ annotationId: id }, globals.output, `Annotation ${id} deleted.\n`);
     } catch (err) {
       handleError(err);
     }

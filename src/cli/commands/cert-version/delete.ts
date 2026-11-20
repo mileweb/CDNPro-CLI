@@ -1,3 +1,4 @@
+import { printWriteResult } from '../../output';
 import { Command } from 'commander';
 import * as readline from 'readline';
 import { resolveCredentials, GlobalOptions } from '../../config';
@@ -42,11 +43,7 @@ export function registerCertVersionDeleteCommand(parent: Command): void {
 
       await client.certificates.deleteVersion(certificateId, version, reqOptions);
 
-      if (!process.stdout.isTTY || globals.output) {
-        process.stdout.write(JSON.stringify({ success: true, certificateId, version }) + '\n');
-      } else {
-        process.stderr.write(`Certificate ${certificateId} version ${version} deleted.\n`);
-      }
+      printWriteResult({ certificateId, version }, globals.output, `Certificate ${certificateId} version ${version} deleted.\n`);
     } catch (err) {
       handleError(err);
     }

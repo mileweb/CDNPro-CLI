@@ -1,8 +1,9 @@
+import { printWriteResult } from '../../output';
 import { Command } from 'commander';
 import { resolveCredentials, GlobalOptions } from '../../config';
 import { CDNProClient } from '../../../client/CDNProClient';
 import { handleError } from '../../errors';
-import { readBodyFile, emitValidationError, checkRequiredOption } from "../../util";
+import { readBodyFile, emitValidationError, checkRequiredOption, normalizeIfUnmodifiedSince } from "../../util";
 import { getExampleBody } from '../../../schema/synthesize';
 import { validateBody } from '../../../schema/validate';
 import {
@@ -46,7 +47,7 @@ export function registerLogAggregationPointUpdateCommand(parent: Command): void 
       if (!validation.valid) emitValidationError(validation, 'cdnpro log-aggregation-point update --example', globals.output);
 
       const headers: Record<string, string> = {};
-      if (opts.ifUnmodifiedSince) headers['If-Unmodified-Since'] = opts.ifUnmodifiedSince as string;
+      if (opts.ifUnmodifiedSince) headers['If-Unmodified-Since'] = normalizeIfUnmodifiedSince(opts.ifUnmodifiedSince as string);
 
       const reqOptions = {
         ...(globals.onBehalfOf ? { onBehalfOf: globals.onBehalfOf } : {}),
@@ -55,11 +56,7 @@ export function registerLogAggregationPointUpdateCommand(parent: Command): void 
       };
 
       await client.logAggregationPoints.update(id, body, reqOptions);
-      if (!process.stdout.isTTY || globals.output) {
-        process.stdout.write(JSON.stringify({ success: true }) + '\n');
-      } else {
-        process.stderr.write(`Log aggregation point ${id} updated.\n`);
-      }
+      printWriteResult({ logAggregationPointId: id }, globals.output, `Log aggregation point ${id} updated.\n`);
     } catch (err) {
       handleError(err);
     }

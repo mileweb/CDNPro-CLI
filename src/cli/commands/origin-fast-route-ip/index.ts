@@ -1,7 +1,7 @@
 import { Command } from 'commander';
 import { resolveCredentials, GlobalOptions } from '../../config';
 import { CDNProClient } from '../../../client/CDNProClient';
-import { printJson, printTable, printJsonl, buildMeta, OutputFormat } from '../../output';
+import { printJson, printTable, printJsonl, buildIpRangeList, OutputFormat } from '../../output';
 import { handleError } from '../../errors';
 import { registerMappings } from '../../option-map';
 
@@ -24,11 +24,11 @@ export function registerOriginFastRouteIpCommands(parent: Command): void {
         const fmt = globals.output as OutputFormat | undefined;
 
         const data = await client.geo.originFastRouteIpList();
-        const { items, meta } = buildMeta(data);
+        const { items, meta } = buildIpRangeList(data);
 
         const effectiveFmt = fmt ?? (process.stdout.isTTY ? 'table' : 'json');
         if (effectiveFmt === 'table') {
-          printTable(items, ['ip', 'cidr', 'serverGroup']);
+          printTable(items, ['ip', 'version']);
         } else if (effectiveFmt === 'jsonl') {
           printJsonl(items);
         } else {

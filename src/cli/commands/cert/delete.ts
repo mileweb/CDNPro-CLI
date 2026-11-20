@@ -1,3 +1,4 @@
+import { printWriteResult } from '../../output';
 import { Command } from 'commander';
 import * as readline from 'readline';
 import { resolveCredentials, GlobalOptions } from '../../config';
@@ -42,11 +43,7 @@ export function registerCertDeleteCommand(parent: Command): void {
 
       await client.certificates.delete(id, reqOptions);
 
-      if (!process.stdout.isTTY || globals.output) {
-        process.stdout.write(JSON.stringify({ success: true, certificateId: id }) + '\n');
-      } else {
-        process.stderr.write(`Certificate ${id} deleted.\n`);
-      }
+      printWriteResult({ certificateId: id }, globals.output, `Certificate ${id} deleted.\n`);
     } catch (err) {
       handleError(err);
     }

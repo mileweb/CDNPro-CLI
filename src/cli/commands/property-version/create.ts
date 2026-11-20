@@ -1,7 +1,7 @@
 import { Command } from 'commander';
 import { resolveCredentials, GlobalOptions } from '../../config';
 import { CDNProClient } from '../../../client/CDNProClient';
-import { printCreateSuccess } from '../../output';
+import { printWriteResult } from '../../output';
 import { handleError } from '../../errors';
 import { readBodyFile, emitValidationError, enrichWithLocationId, checkRequiredOption } from '../../util';
 import { getExampleBody } from '../../../schema/synthesize';
@@ -52,7 +52,11 @@ export function registerPropertyVersionCreateCommand(parent: Command): void {
       const data = enrichWithLocationId(raw);
       const id = data['id'] as string;
 
-      printCreateSuccess('Property Version', 'propertyVersionId', id, globals.output);
+      printWriteResult(
+        { propertyId, version: id },
+        globals.output,
+        `Created new Property Version: "${id}".`,
+      );
     } catch (err) {
       handleError(err);
     }

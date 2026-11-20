@@ -1,3 +1,4 @@
+import { printWriteResult } from '../../output';
 import { Command } from 'commander';
 import * as readline from 'readline';
 import { resolveCredentials, GlobalOptions } from '../../config';
@@ -42,11 +43,7 @@ export function registerSecretDeleteCommand(parent: Command): void {
 
       await client.secrets.delete(id, reqOptions);
 
-      if (!process.stdout.isTTY || globals.output) {
-        process.stdout.write(JSON.stringify({ success: true, secretId: id }) + '\n');
-      } else {
-        process.stderr.write(`Secret ${id} deleted.\n`);
-      }
+      printWriteResult({ secretId: id }, globals.output, `Secret ${id} deleted.\n`);
     } catch (err) {
       handleError(err);
     }

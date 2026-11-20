@@ -1,3 +1,4 @@
+import { printWriteResult } from '../../../output';
 import { Command } from 'commander';
 import * as readline from 'readline';
 import { resolveCredentials, GlobalOptions } from '../../../config';
@@ -12,7 +13,7 @@ interface DeleteOpts {
 }
 
 export function registerAdminApiAccountDeleteCommand(parent: Command): void {
-  registerMappings('api-account', 'delete', ADMIN_API_ACCOUNT_DELETE_OPTIONS);
+  registerMappings('admin-api-account', 'delete', ADMIN_API_ACCOUNT_DELETE_OPTIONS);
 
   const cmd = parent
     .command('delete <id>')
@@ -41,11 +42,7 @@ export function registerAdminApiAccountDeleteCommand(parent: Command): void {
 
       await client.apiAccounts.delete(id, reqOptions);
 
-      if (!process.stdout.isTTY || globals.output) {
-        process.stdout.write(JSON.stringify({ success: true, apiAccountId: id }) + '\n');
-      } else {
-        process.stderr.write(`API account ${id} deleted.\n`);
-      }
+      printWriteResult({ apiAccountId: id }, globals.output, `API account ${id} deleted.\n`);
     } catch (err) {
       handleError(err);
     }

@@ -10,8 +10,8 @@ import {
 } from '../../option-map';
 
 export const HOSTNAME_HISTORY_GET_OPTIONS: OptionMapping[] = [
-  { flag: '--from <date>',   target: 'query', param: 'from',   description: 'Start date (RFC 3339 UTC)' },
-  { flag: '--to <date>',     target: 'query', param: 'to',     description: 'End date (RFC 3339 UTC)' },
+  { flag: '--from <date>',   target: 'query', param: 'startdate',   description: 'Start date (RFC 3339 UTC)' },
+  { flag: '--to <date>',     target: 'query', param: 'enddate',     description: 'End date (RFC 3339 UTC)' },
   { flag: '--target <target>', target: 'query', param: 'target', description: 'Filter by deployment target: staging | production | all' },
 ];
 

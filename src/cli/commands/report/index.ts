@@ -39,8 +39,8 @@ export function registerReportCommands(parent: Command): void {
   registerTimeSeriesReportCommand(report, 'cpu-time',            'CPU time by time period',                '/cdn/report/cpuTime');
   registerTimeSeriesReportCommand(report, 'origin-fast-route-requests', 'Origin fast-route requests',     '/cdn/report/fastOriginReq');
   registerTimeSeriesReportCommand(report, 'origin-fast-route-volume',   'Origin fast-route volume',       '/cdn/report/fastOriginVol');
-  registerTimeSeriesReportCommand(report, 'l7-volume',           'L7 volume by time period',               '/cdn/report/volL7');
-  registerTimeSeriesReportCommand(report, 'l7-bandwidth',        'L7 bandwidth by time period',            '/cdn/report/bandwidthL7');
+  registerTimeSeriesReportCommand(report, 'l7-volume',           'L7 volume by time period',               '/cdn/report/volL7', { noScheme: true });
+  registerTimeSeriesReportCommand(report, 'l7-bandwidth',        'L7 bandwidth by time period',            '/cdn/report/bandwidthL7', { noScheme: true });
 
   // edge-hostname-requests: no --scheme, no --report-range, uses edgeHostname filter
   registerTimeSeriesReportCommand(
@@ -58,8 +58,8 @@ export function registerReportCommands(parent: Command): void {
   registerSummaryReportCommand(report, 'edge-status-summary',             'Edge HTTP status code summary',            '/cdn/report/edgeStatusSummary');
   registerSummaryReportCommand(report, 'origin-status-summary',           'Origin HTTP status code summary',          '/cdn/report/originStatusSummary');
   registerSummaryReportCommand(report, 'cpu-summary',                     'CPU time summary',                         '/cdn/report/cpuSummary');
-  registerSummaryReportCommand(report, 'l7-volume-summary',               'L7 volume summary',                        '/cdn/report/volL7Summary');
-  registerSummaryReportCommand(report, 'l7-bandwidth-summary',            'L7 bandwidth summary',                     '/cdn/report/bandwidthL7Summary');
+  registerSummaryReportCommand(report, 'l7-volume-summary',               'L7 volume summary',                        '/cdn/report/volL7Summary', { noScheme: true });
+  registerSummaryReportCommand(report, 'l7-bandwidth-summary',            'L7 bandwidth summary',                     '/cdn/report/bandwidthL7Summary', { noScheme: true });
 
   // edge-hostname-requests-summary: no --scheme, uses edgeHostname filter, no group-by
   registerSummaryReportCommand(

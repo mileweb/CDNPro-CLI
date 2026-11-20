@@ -6,7 +6,7 @@ import { handleError } from '../../../errors';
 import { registerMappings } from '../../../option-map';
 
 export function registerAdminCustomerGetCommand(parent: Command): void {
-  registerMappings('customer', 'get', []);
+  registerMappings('admin-customer', 'get', []);
 
   parent
     .command('get <id>')

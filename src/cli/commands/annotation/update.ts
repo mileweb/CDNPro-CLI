@@ -1,3 +1,4 @@
+import { printWriteResult } from '../../output';
 import { Command } from 'commander';
 import { resolveCredentials, GlobalOptions } from '../../config';
 import { CDNProClient } from '../../../client/CDNProClient';
@@ -49,11 +50,7 @@ export function registerAnnotationUpdateCommand(parent: Command): void {
       };
 
       await client.annotations.update(id, body, reqOptions);
-      if (!process.stdout.isTTY || globals.output) {
-        process.stdout.write(JSON.stringify({ success: true }) + '\n');
-      } else {
-        process.stderr.write(`Annotation ${id} updated.\n`);
-      }
+      printWriteResult({ annotationId: id }, globals.output, `Annotation ${id} updated.\n`);
     } catch (err) {
       handleError(err);
     }

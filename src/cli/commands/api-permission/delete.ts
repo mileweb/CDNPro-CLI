@@ -1,3 +1,4 @@
+import { printWriteResult } from '../../output';
 import { Command } from 'commander';
 import * as readline from 'readline';
 import { resolveCredentials, GlobalOptions } from '../../config';
@@ -42,11 +43,7 @@ export function registerApiPermissionDeleteCommand(parent: Command): void {
 
       await client.apiPermissions.delete(id, reqOptions);
 
-      if (!process.stdout.isTTY || globals.output) {
-        process.stdout.write(JSON.stringify({ success: true, apiPermissionId: id }) + '\n');
-      } else {
-        process.stderr.write(`API permission ${id} deleted.\n`);
-      }
+      printWriteResult({ apiPermissionId: id }, globals.output, `API permission ${id} deleted.\n`);
     } catch (err) {
       handleError(err);
     }

@@ -1,3 +1,4 @@
+import { printWriteResult } from '../../../output';
 import { Command } from 'commander';
 import { resolveCredentials, GlobalOptions } from '../../../config';
 import { CDNProClient } from '../../../../client/CDNProClient';
@@ -48,11 +49,7 @@ export function registerAdminContactUpdateCommand(parent: Command): void {
       };
 
       await client.contacts.update(id, body, reqOptions);
-      if (!process.stdout.isTTY || globals.output) {
-        process.stdout.write(JSON.stringify({ success: true }) + '\n');
-      } else {
-        process.stderr.write(`Contact ${id} updated.\n`);
-      }
+      printWriteResult({ contactId: id }, globals.output, `Contact ${id} updated.\n`);
     } catch (err) {
       handleError(err);
     }
