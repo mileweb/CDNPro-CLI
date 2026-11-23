@@ -30,8 +30,8 @@ program
     }
     setErrorOutput(globals.output as string | undefined);
 
-    // Disable chalk colors if --no-color is set
-    if (globals.noColor) {
+    // Commander stores --no-color as `color: false`.
+    if (globals.color === false) {
       chalk.level = 0;
     }
     // Only real commands trigger the (cached, detached) update check —

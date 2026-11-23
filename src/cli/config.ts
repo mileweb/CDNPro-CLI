@@ -31,7 +31,8 @@ export interface GlobalOptions {
   user?: string;
   secretKey?: string;
   output?: string;
-  noColor?: boolean;
+  /** Commander's name for --no-color: false when the flag was passed. */
+  color?: boolean;
   verbose?: number;
   onBehalfOf?: string;
 }

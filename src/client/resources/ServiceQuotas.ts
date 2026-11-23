@@ -1,5 +1,14 @@
 import { ApiCore, RequestOptions } from '../ApiCore';
 
+function requireId(value: string | number, name: string): string {
+  if (value === undefined || value === null || value === '') throw new Error(`${name} is required`);
+  return encodeURIComponent(String(value));
+}
+
+/**
+ * Service quotas (reseller APIs). These are available through the library only;
+ * the CLI exposes list/get/update.
+ */
 export class ServiceQuotas {
   private api: ApiCore;
 
@@ -17,24 +26,30 @@ export class ServiceQuotas {
   }
 
   get(serviceQuotaId: string, reqOptions: RequestOptions = {}) {
-    if (!serviceQuotaId) throw new Error('serviceQuotaId is required');
-    return this.api.request('GET', `/cdn/serviceQuotas/${encodeURIComponent(serviceQuotaId)}`, reqOptions);
-  }
-
-  getByCustomer(customerId: string | number, reqOptions: RequestOptions = {}) {
-    if (!customerId) throw new Error('customerId is required');
-    return this.api.request('GET', `/cdn/serviceQuotas/customer/${encodeURIComponent(String(customerId))}`, reqOptions);
+    return this.api.request('GET', `/cdn/serviceQuotas/${requireId(serviceQuotaId, 'serviceQuotaId')}`, reqOptions);
   }
 
   update(serviceQuotaId: string, patchBody: unknown, reqOptions: RequestOptions = {}) {
-    if (!serviceQuotaId) throw new Error('serviceQuotaId is required');
+    const id = requireId(serviceQuotaId, 'serviceQuotaId');
     if (!patchBody) throw new Error('patchBody is required');
-    return this.api.request('PATCH', `/cdn/serviceQuotas/${encodeURIComponent(serviceQuotaId)}`, { ...reqOptions, body: patchBody });
+    return this.api.request('PATCH', `/cdn/serviceQuotas/${id}`, { ...reqOptions, body: patchBody });
+  }
+
+  delete(serviceQuotaId: string, reqOptions: RequestOptions = {}) {
+    return this.api.request('DELETE', `/cdn/serviceQuotas/${requireId(serviceQuotaId, 'serviceQuotaId')}`, reqOptions);
+  }
+
+  getByCustomer(customerId: string | number, reqOptions: RequestOptions = {}) {
+    return this.api.request('GET', `/cdn/serviceQuotas/customer/${requireId(customerId, 'customerId')}`, reqOptions);
   }
 
   updateByCustomer(customerId: string | number, patchBody: unknown, reqOptions: RequestOptions = {}) {
-    if (!customerId) throw new Error('customerId is required');
+    const id = requireId(customerId, 'customerId');
     if (!patchBody) throw new Error('patchBody is required');
-    return this.api.request('PATCH', `/cdn/serviceQuotas/customer/${encodeURIComponent(String(customerId))}`, { ...reqOptions, body: patchBody });
+    return this.api.request('PATCH', `/cdn/serviceQuotas/customer/${id}`, { ...reqOptions, body: patchBody });
+  }
+
+  deleteByCustomer(customerId: string | number, reqOptions: RequestOptions = {}) {
+    return this.api.request('DELETE', `/cdn/serviceQuotas/customer/${requireId(customerId, 'customerId')}`, reqOptions);
   }
 }
