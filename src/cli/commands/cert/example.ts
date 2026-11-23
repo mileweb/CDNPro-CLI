@@ -66,5 +66,8 @@ export function getCertExample(
     if (specExample !== null) return specExample;
   }
 
-  return constructedExample(mode);
+  const example = constructedExample(mode) as Record<string, unknown>;
+  // caOnly is set at creation and is not a property of the PATCH body.
+  if (method.toLowerCase() === 'patch') delete example['caOnly'];
+  return example;
 }

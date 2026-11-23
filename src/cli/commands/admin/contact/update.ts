@@ -45,6 +45,7 @@ export function registerAdminContactUpdateCommand(parent: Command): void {
       if (!validation.valid) emitValidationError(validation, 'cdnpro admin contact update --example', globals.output);
 
       const reqOptions = {
+        ...(globals.onBehalfOf ? { onBehalfOf: globals.onBehalfOf } : {}),
         ...(globals.verbose ? { verbose: globals.verbose } : {}),
       };
 

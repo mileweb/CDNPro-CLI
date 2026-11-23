@@ -3,7 +3,7 @@ import { resolveCredentials, GlobalOptions } from '../../config';
 import { CDNProClient } from '../../../client/CDNProClient';
 import { printResult, OutputFormat } from '../../output';
 import { handleError } from '../../errors';
-import { readBodyFile, checkRequiredOption, validateRequestOrThrow } from '../../util';
+import { readBodyFile, validateRequestOrThrow } from '../../util';
 import { getExampleBody } from '../../../schema/synthesize';
 import { registerTimeSeriesReportCommand } from './time-series';
 import { registerSummaryReportCommand } from './summary';
@@ -11,6 +11,8 @@ import {
   OptionMapping,
   FILE_EXAMPLE,
   registerOptionsFromMapping,
+  buildRequestFromMapping,
+  checkRequiredMappings,
   registerMappings,
 } from '../../option-map';
 
@@ -39,8 +41,8 @@ export function registerReportCommands(parent: Command): void {
   registerTimeSeriesReportCommand(report, 'cpu-time',            'CPU time by time period',                '/cdn/report/cpuTime');
   registerTimeSeriesReportCommand(report, 'origin-fast-route-requests', 'Origin fast-route requests',     '/cdn/report/fastOriginReq');
   registerTimeSeriesReportCommand(report, 'origin-fast-route-volume',   'Origin fast-route volume',       '/cdn/report/fastOriginVol');
-  registerTimeSeriesReportCommand(report, 'l7-volume',           'L7 volume by time period',               '/cdn/report/volL7', { noScheme: true });
-  registerTimeSeriesReportCommand(report, 'l7-bandwidth',        'L7 bandwidth by time period',            '/cdn/report/bandwidthL7', { noScheme: true });
+  registerTimeSeriesReportCommand(report, 'l7-volume',           'L7 volume by time period',               '/cdn/report/volL7', { noScheme: true, filters: 'l7' });
+  registerTimeSeriesReportCommand(report, 'l7-bandwidth',        'L7 bandwidth by time period',            '/cdn/report/bandwidthL7', { noScheme: true, filters: 'l7' });
 
   // edge-hostname-requests: no --scheme, no --report-range, uses edgeHostname filter
   registerTimeSeriesReportCommand(
@@ -48,7 +50,7 @@ export function registerReportCommands(parent: Command): void {
     'edge-hostname-requests',
     'Edge hostname request count by time period',
     '/cdn/report/edgeHostnameReq',
-    { noScheme: true, noReportRange: true, edgeHostnameFilter: true },
+    { noScheme: true, noReportRange: true, filters: 'edgeHostname' },
   );
 
   // ── Summary reports ──────────────────────────────────────────────────
@@ -58,8 +60,8 @@ export function registerReportCommands(parent: Command): void {
   registerSummaryReportCommand(report, 'edge-status-summary',             'Edge HTTP status code summary',            '/cdn/report/edgeStatusSummary');
   registerSummaryReportCommand(report, 'origin-status-summary',           'Origin HTTP status code summary',          '/cdn/report/originStatusSummary');
   registerSummaryReportCommand(report, 'cpu-summary',                     'CPU time summary',                         '/cdn/report/cpuSummary');
-  registerSummaryReportCommand(report, 'l7-volume-summary',               'L7 volume summary',                        '/cdn/report/volL7Summary', { noScheme: true });
-  registerSummaryReportCommand(report, 'l7-bandwidth-summary',            'L7 bandwidth summary',                     '/cdn/report/bandwidthL7Summary', { noScheme: true });
+  registerSummaryReportCommand(report, 'l7-volume-summary',               'L7 volume summary',                        '/cdn/report/volL7Summary', { noScheme: true, filters: 'l7' });
+  registerSummaryReportCommand(report, 'l7-bandwidth-summary',            'L7 bandwidth summary',                     '/cdn/report/bandwidthL7Summary', { noScheme: true, filters: 'l7' });
 
   // edge-hostname-requests-summary: no --scheme, uses edgeHostname filter, no group-by
   registerSummaryReportCommand(
@@ -67,7 +69,7 @@ export function registerReportCommands(parent: Command): void {
     'edge-hostname-requests-summary',
     'Edge hostname request count summary',
     '/cdn/report/edgeHostnameReqSummary',
-    { noScheme: true, edgeHostnameFilter: true },
+    { noScheme: true, filters: 'edgeHostname' },
   );
 
   // ── Log download ─────────────────────────────────────────────────────
@@ -77,7 +79,7 @@ export function registerReportCommands(parent: Command): void {
     .command('logs')
     .description('Request log download links');
   registerOptionsFromMapping(logsCmd, REPORT_LOGS_OPTIONS);
-  logsCmd.action(async (opts: { from?: string; to?: string; hostname?: string[]; file?: string; example?: boolean }, cmdObj: Command) => {
+  logsCmd.action(async (opts: Record<string, unknown>, cmdObj: Command) => {
     try {
       if (opts.example) {
         const example = getExampleBody('/cdn/report/logDownload', 'post');
@@ -85,25 +87,19 @@ export function registerReportCommands(parent: Command): void {
         return;
       }
 
-      checkRequiredOption(opts.from, '--from <date>');
-      checkRequiredOption(opts.to, '--to <date>');
+      checkRequiredMappings(opts, REPORT_LOGS_OPTIONS);
 
       const globals = cmdObj.optsWithGlobals<GlobalOptions>();
 
-      // --from/--to are query parameters and must be sent even when --file
-      // supplies the request body. --file only replaces the body.
-      const query: Record<string, unknown> = {
-        startdate: opts.from,
-        enddate: opts.to,
-      };
+      // --from/--to are query parameters and must be sent (and validated as RFC 3339
+      // date-times) even when --file supplies the request body. --file only replaces the body.
+      const { query, body: builtBody } = buildRequestFromMapping(opts, REPORT_LOGS_OPTIONS, globals);
 
       let body: unknown;
       if (opts.file) {
-        body = readBodyFile(opts.file);
+        body = readBodyFile(opts.file as string);
       } else {
-        const filters: Record<string, unknown> = {};
-        if ((opts.hostname ?? []).length > 0) filters['hostnames'] = opts.hostname;
-        body = Object.keys(filters).length > 0 ? { filters } : undefined;
+        body = builtBody ?? undefined;
       }
 
       validateRequestOrThrow(

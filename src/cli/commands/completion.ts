@@ -233,7 +233,7 @@ _cdnpro() {
       validation)
         case "$sub" in
           list)   flags="--from --to --property --property-version --status --search --sort-by --sort-order --limit --offset --all --max-pages --report-range";;
-          create) flags="--file --wait --timeout --poll-interval";;
+          create) flags="--property-id --property-version --name --webhook --file --example --wait --timeout --poll-interval";;
         esac;;
       edge-hostname)
         case "$sub" in
@@ -256,9 +256,13 @@ _cdnpro() {
         esac;;
       report)
         case "$sub" in
-          logs)      flags="--from --to --hostname --file";;
-          *-summary) flags="--from --to --scheme --hostname --property --property-hostname --server-group --group-by --file";;
-          *)         flags="--from --to --type --scheme --hostname --property --property-hostname --server-group --file --report-range";;
+          logs)      flags="--from --to --hostname --file --example";;
+          edge-hostname-requests-summary) flags="--from --to --edge-hostname --file --example";;
+          edge-hostname-requests)         flags="--from --to --type --edge-hostname --file --example";;
+          l7-*-summary) flags="--from --to --hostname --property-hostname --content-code --group-by --file --example --report-range";;
+          l7-*)      flags="--from --to --type --hostname --property-hostname --content-code --file --example --report-range";;
+          *-summary) flags="--from --to --scheme --hostname --property --property-hostname --server-group --group-by --file --example";;
+          *)         flags="--from --to --type --scheme --hostname --property --property-hostname --server-group --file --example --report-range";;
         esac;;
       log-config)
         case "$sub" in
@@ -885,7 +889,7 @@ Register-ArgumentCompleter -Native -CommandName @('cdnpro') -ScriptBlock {
       'deploy/list'             { @('--from','--to','--target','--status','--property','--cert','--search','--task-ids','--sort-by','--sort-order','--limit','--offset','--all','--max-pages','--report-range') }
       'deploy/create'           { @('--target','--deploy-property','--remove-property','--deploy-cert','--remove-cert','--name','--webhook','--file','--wait','--timeout','--poll-interval','--skip-certificate-check','--skip-client-ca-certificate-check','--skip-origin-auth-certificate-check','--skip-usage-check','--example') }
       'validation/list'         { @('--from','--to','--property','--property-version','--status','--search','--sort-by','--sort-order','--limit','--offset','--all','--max-pages','--report-range') }
-      'validation/create'       { @('--file','--wait','--timeout','--poll-interval') }
+      'validation/create'       { @('--property-id','--property-version','--name','--webhook','--file','--example','--wait','--timeout','--poll-interval') }
       'edge-hostname/list'      { @('--search','--has-beian','--server-groups','--sort-by','--sort-order','--limit','--offset','--all','--max-pages','--report-range') }
       { $_ -in 'edge-hostname/create' } { @('--file','--example') }
       { $_ -in 'edge-hostname/update','edge-hostname/replace' } { @('--file','--if-unmodified-since') }
@@ -896,9 +900,13 @@ Register-ArgumentCompleter -Native -CommandName @('cdnpro') -ScriptBlock {
       'purge/tokens'            { @('--target') }
       'prefetch/create'         { @('--name','--url','--region','--start-time','--webhook','--file','--example','--wait','--timeout','--poll-interval') }
       'prefetch/list'           { @('--from','--to','--search','--sort-by','--sort-order','--limit','--offset','--all','--max-pages','--report-range') }
-      'report/logs'             { @('--from','--to','--hostname','--file') }
-      { $sub -like '*-summary'  } { @('--from','--to','--scheme','--hostname','--property','--property-hostname','--server-group','--group-by','--file') }
-      { $cmd -eq 'report'       } { @('--from','--to','--type','--scheme','--hostname','--property','--property-hostname','--server-group','--file','--report-range') }
+      'report/logs'             { @('--from','--to','--hostname','--file','--example'); break }
+      { $sub -like 'edge-hostname-requests-summary' } { @('--from','--to','--edge-hostname','--file','--example'); break }
+      { $sub -like 'edge-hostname-requests' } { @('--from','--to','--type','--edge-hostname','--file','--example'); break }
+      { $sub -like 'l7-*-summary' } { @('--from','--to','--hostname','--property-hostname','--content-code','--group-by','--file','--example','--report-range'); break }
+      { $sub -like 'l7-*'       } { @('--from','--to','--type','--hostname','--property-hostname','--content-code','--file','--example','--report-range'); break }
+      { $sub -like '*-summary'  } { @('--from','--to','--scheme','--hostname','--property','--property-hostname','--server-group','--group-by','--file','--example'); break }
+      { $cmd -eq 'report'       } { @('--from','--to','--type','--scheme','--hostname','--property','--property-hostname','--server-group','--file','--example','--report-range'); break }
       'schema/'                 { @('--direction') }
       default                   { @() }
     }

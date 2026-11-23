@@ -1,4 +1,5 @@
 import Conf from 'conf';
+import * as fs from 'fs';
 import * as readline from 'readline';
 import { ServerInfo } from '../client/ApiCore';
 import { CliError } from './errors';
@@ -35,8 +36,9 @@ export interface GlobalOptions {
   onBehalfOf?: string;
 }
 
-// conf@9 stores data at ~/.config/cdnpro/config.json (Linux/macOS)
-// or %APPDATA%\cdnpro\config.json (Windows).
+// conf@9 stores data under the "cdnpro-nodejs" project directory:
+// ~/.config/cdnpro-nodejs/config.json (Linux), ~/Library/Preferences/cdnpro-nodejs/config.json
+// (macOS), or %APPDATA%\cdnpro-nodejs\Config\config.json (Windows).
 const store = new Conf<CdnProConfig>({
   projectName: 'cdnpro',
   defaults: {
@@ -46,22 +48,42 @@ const store = new Conf<CdnProConfig>({
 });
 
 export async function resolveCredentials(globalOpts: GlobalOptions): Promise<ServerInfo> {
-  // 1. Explicit CLI flags (all three required together)
-  if (globalOpts.host && globalOpts.user && globalOpts.secretKey) {
+  // 1. Explicit CLI flags (all three required together). A partial set is an
+  //    error: silently falling back to a saved profile would run the command
+  //    against a different account or host than the caller asked for, and
+  //    merging would send the profile's user and signature to an arbitrary host.
+  const flagCount = [globalOpts.host, globalOpts.user, globalOpts.secretKey].filter(Boolean).length;
+  if (flagCount === 3) {
     return {
-      host: globalOpts.host,
-      user: globalOpts.user,
-      secretKey: globalOpts.secretKey,
+      host: globalOpts.host!,
+      user: globalOpts.user!,
+      secretKey: globalOpts.secretKey!,
     };
   }
+  if (flagCount > 0) {
+    throw new CliError(
+      'CONFIG_ERROR',
+      '--host, --user, and --secret-key must be supplied together; to use a saved profile, omit all three.',
+    );
+  }
 
-  // 2. Environment variables (all three required together)
-  if (process.env['CDNPRO_HOST'] && process.env['CDNPRO_USER'] && process.env['CDNPRO_SECRETKEY']) {
-    return {
-      host: process.env['CDNPRO_HOST'],
-      user: process.env['CDNPRO_USER'],
-      secretKey: process.env['CDNPRO_SECRETKEY'],
-    };
+  // 2. Environment variables (all three required together). An explicit
+  //    --profile is a more specific request than ambient environment, so it wins.
+  const envCount = ['CDNPRO_HOST', 'CDNPRO_USER', 'CDNPRO_SECRETKEY'].filter((k) => process.env[k]).length;
+  if (globalOpts.profile === undefined) {
+    if (envCount === 3) {
+      return {
+        host: process.env['CDNPRO_HOST']!,
+        user: process.env['CDNPRO_USER']!,
+        secretKey: process.env['CDNPRO_SECRETKEY']!,
+      };
+    }
+    if (envCount > 0) {
+      process.stderr.write(
+        'Warning: CDNPRO_HOST, CDNPRO_USER and CDNPRO_SECRETKEY must all be set to be used; ' +
+          'ignoring the partial set and falling back to a saved profile.\n',
+      );
+    }
   }
 
   // 3. Profile: CLI flag > env var > stored default
@@ -111,10 +133,24 @@ export async function saveProfile(name: string, profile: Profile): Promise<void>
     profiles[name] = { host: profile.host, user: profile.user };
   } else {
     warnKeychainUnavailable();
+    // Drop any keychain entry left by an earlier save: resolveCredentials prefers
+    // the keychain, so a stale one would shadow the secret saved here.
+    await deleteSecret(name);
     profiles[name] = { host: profile.host, user: profile.user, secretKey: profile.secretKey };
   }
 
   store.set('profiles', profiles);
+
+  // The file may now hold a plaintext secret; keep it owner-only. conf offers no
+  // file-mode option and atomically preserves the mode of an existing file, so
+  // setting it once is enough. (Windows ignores POSIX modes.)
+  if (profiles[name].secretKey !== undefined && process.platform !== 'win32') {
+    try {
+      fs.chmodSync(store.path, 0o600);
+    } catch {
+      process.stderr.write(`Warning: could not restrict permissions on ${store.path}; chmod it to 600.\n`);
+    }
+  }
 }
 
 export async function deleteProfile(name: string): Promise<void> {

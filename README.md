@@ -41,7 +41,7 @@ npm install -g .
 
 CDNPro CLI resolves credentials in this order:
 
-1. CLI flags: `--host`, `--user`, `--secret-key`
+1. CLI flags: `--host`, `--user`, `--secret-key` (all three together; supplying only some is an error)
 2. Environment variables: `CDNPRO_HOST`, `CDNPRO_USER`, `CDNPRO_SECRETKEY`
 3. Named profile (via `--profile <name>` or `CDNPRO_PROFILE` env var)
 4. The saved profile marked `(default)` in `cdnpro auth list`
@@ -89,9 +89,13 @@ When `--profile` is omitted, the command chooses a profile in this order:
 
 Saved profiles are not used when explicit credentials are supplied. That is `--host`, `--user`, and `--secret-key` together, or `CDNPRO_HOST`, `CDNPRO_USER`, and `CDNPRO_SECRETKEY` together.
 
+- Passing only some of `--host`, `--user`, `--secret-key` exits with code 9 rather than silently using a saved profile (which would send that profile's user to the host you named).
+- If only some of the `CDNPRO_*` credential variables are set, they are ignored with a warning and the saved profile is used.
+- An explicit `--profile <name>` takes precedence over complete `CDNPRO_*` credentials, since it is the more specific request.
+
 Credentials are stored securely:
 - **Secret key** — stored in the OS keychain (macOS Keychain, Windows Credential Manager, Linux Secret Service). If the keychain is unavailable (headless server, CI), a one-time warning is shown and the secret falls back to the config file.
-- **Host and username** — stored in the config file:
+- **Host and username** — stored in the config file (when the secret falls back to this file on Linux/macOS, the file is restricted to mode 0600):
   - Linux: `~/.config/cdnpro-nodejs/config.json`
   - macOS: `~/Library/Preferences/cdnpro-nodejs/config.json`
   - Windows: `%APPDATA%\cdnpro-nodejs\Config\config.json`
@@ -217,6 +221,7 @@ cdnpro cert create --name <name> [--file <path>] [--example]
                    # CA-only mode:
                    --ca-only --ca <file> [--comments <text>]
 cdnpro cert update <id> [--name <name>] [--file <path>] [--example]
+                        # --name alone renames the certificate (no new version)
                         # Upload mode, self-signed mode, CA-only mode:
                         # same flags as `cert create`
 cdnpro cert delete <id>
@@ -333,7 +338,7 @@ cdnpro deploy create (--target <staging|production>
 | `--timeout <seconds>` | Max wait time (default: 600) |
 | `--poll-interval <seconds>` | Poll frequency in seconds (default: 30) |
 
-The `--wait` flag shows a spinner in a TTY and NDJSON progress lines when piped.
+The `--wait` flag shows a spinner in a TTY and NDJSON progress lines when piped. `--timeout` and `--poll-interval` must be positive integers and are validated before the request is sent. Polling carries `--on-behalf-of`, makes a final poll at the deadline, and tolerates a few transient errors (429, 5xx, dropped connections) while the task keeps running. If the server returns no resource ID for a created resource, the command exits 1 instead of printing an empty ID.
 
 ### Validation
 
@@ -364,7 +369,7 @@ cdnpro purge list [--from <date>] [--to <date>] [--target <staging|production>]
                   [--sort-order <asc|desc>] [--limit <n>] [--offset <n>]
                   [--report-range <scope>] [--all]
 cdnpro purge get <id>
-cdnpro purge summary
+cdnpro purge summary --from <date> --to <date> [--target <staging|production>]
 cdnpro purge tokens
 cdnpro purge create --target <staging|production> [--url <url>] [--dir <dir>] [--regex <pattern>] [--file <path>] [--example] [--wait] [--timeout <seconds>] [--poll-interval <seconds>]
 ```
@@ -448,7 +453,7 @@ cdnpro log-aggregation-point summary --from <date> --to <date>
 #### Annotations
 
 ```bash
-cdnpro annotation list [--from <date>] [--to <date>] [--type <client|configuration|operation>]
+cdnpro annotation list --from <date> --to <date> [--type <client|configuration|operation>]
                        [--search <keyword>] [--limit <n>] [--offset <n>]
                        [--report-range <scope>] [--all]
 cdnpro annotation get|create|update|delete
@@ -501,7 +506,7 @@ All report commands require `--from` and `--to` (RFC 3339 UTC dates).
 
 #### Time-series reports
 
-Require `--type <granularity>` (`fiveminutes` | `hourly` | `daily` | `monthly`). Most accept `--hostname`, `--property`, `--property-hostname`, `--server-group` (all repeatable), `--scheme` (`http` | `https` | `all`), and `--report-range`.
+Require `--type <granularity>` (`fiveminutes` | `hourly` | `daily` | `monthly`). Most accept `--hostname`, `--property`, `--property-hostname`, `--server-group` (all repeatable), `--scheme` (`http` | `https` | `all`), and `--report-range`. The L7 reports (`l7-volume`, `l7-bandwidth`) accept only `--hostname`, `--property-hostname`, and `--content-code` (repeatable) plus `--report-range`; `edge-hostname-requests` filters on `--edge-hostname`.
 
 ```bash
 cdnpro report edge-bandwidth --from <date> --to <date> --type <granularity>
@@ -523,7 +528,7 @@ cdnpro report edge-hostname-requests --from <date> --to <date> --type <granulari
 
 #### Summary reports
 
-Do not take `--type`. Most accept the same filters as time-series reports, plus `--group-by` (repeatable, up to 2: `hostnames` | `serverGroups` | `customerIds` | `propertyHostnames` | `legacyTypes`).
+Do not take `--type`. Most accept the same filters as time-series reports, plus `--group-by` (repeatable). The accepted `--group-by` values, the item limit, and whether `--scheme` allows `all` differ per endpoint; `cdnpro report <name> --help` lists them for that endpoint (they come from the API spec). The L7 summaries take `--hostname`, `--property-hostname`, `--content-code`, `--group-by`, and `--report-range`.
 
 ```bash
 cdnpro report edge-bandwidth-summary --from <date> --to <date>

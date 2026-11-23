@@ -45,6 +45,7 @@ export function registerAdminApiAccountUpdateCommand(parent: Command): void {
       if (!validation.valid) emitValidationError(validation, 'cdnpro admin api-account update --example', globals.output);
 
       const reqOptions = {
+        ...(globals.onBehalfOf ? { onBehalfOf: globals.onBehalfOf } : {}),
         ...(globals.verbose ? { verbose: globals.verbose } : {}),
       };
 

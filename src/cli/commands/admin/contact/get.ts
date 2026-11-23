@@ -19,6 +19,7 @@ export function registerAdminContactGetCommand(parent: Command): void {
         const fmt = globals.output as OutputFormat | undefined;
 
         const reqOptions = {
+          ...(globals.onBehalfOf ? { onBehalfOf: globals.onBehalfOf } : {}),
           ...(globals.verbose ? { verbose: globals.verbose } : {}),
         };
 

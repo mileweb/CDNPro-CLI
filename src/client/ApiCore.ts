@@ -10,6 +10,8 @@ export interface ServerInfo {
   secretKey: string;
   family?: 4 | 6;
   scheme?: 'http' | 'https';
+  /** Override the default port for the scheme (mainly for tests and proxies). */
+  port?: number;
 }
 
 export interface RequestOptions {
@@ -89,6 +91,8 @@ function withQuery(path: string, query?: Record<string, string | number | boolea
   if (path.includes('?')) return `${path}&${qs.slice(1)}`;
   return `${path}${qs}`;
 }
+
+const IDEMPOTENT_METHODS = new Set(['GET', 'HEAD', 'OPTIONS', 'PUT', 'DELETE']);
 
 interface AgentPool {
   http: http.Agent;
@@ -191,6 +195,8 @@ export class ApiCore {
     };
 
     if (serverInfo.family) out.family = serverInfo.family;
+    if (serverInfo.scheme) out.scheme = serverInfo.scheme;
+    if (serverInfo.port) out.port = serverInfo.port;
 
     if (options) {
       if (options.noCache === true) out.headers['Cache-Control'] = 'no-cache';
@@ -251,13 +257,18 @@ export class ApiCore {
         if (ce === 'br') uncomp = zlib.createBrotliDecompress();
         else if (ce === 'gzip') uncomp = zlib.createGunzip();
 
-        let data = '';
+        // Collect raw bytes and decode once at the end: converting each chunk to a
+        // string separately corrupts multi-byte UTF-8 characters split across chunks.
+        const chunks: Buffer[] = [];
         let len = 0;
+        let data = '';
 
         const finalProc = () => {
           const resTime = Date.now();
+          const decoded = Buffer.concat(chunks);
+          data = decoded.toString('utf8');
           ctx.times!.finish = resTime;
-          ctx.bodyBytes = { raw: len, decoded: data.length };
+          ctx.bodyBytes = { raw: len, decoded: decoded.length };
 
           if (options.verbose > 0) {
             const headerSec = (hdrTime - stime) / 1000;
@@ -294,7 +305,7 @@ export class ApiCore {
         res.on('data', (chunk: Buffer) => {
           len += chunk.length;
           if (uncomp) uncomp.write(chunk);
-          else data += chunk;
+          else chunks.push(chunk);
         });
 
         res.on('end', () => {
@@ -303,8 +314,13 @@ export class ApiCore {
         });
 
         if (uncomp) {
-          uncomp.on('data', (chunk: Buffer) => { data += chunk; });
+          uncomp.on('data', (chunk: Buffer) => { chunks.push(chunk); });
           uncomp.on('end', finalProc);
+          uncomp.on('error', (err: Error) => {
+            const apiErr = err as ApiError;
+            apiErr.ctx = ctx as ResponseContext;
+            reject(apiErr);
+          });
         }
       });
 
@@ -344,7 +360,10 @@ export class ApiCore {
       return await doRequest();
     } catch (err) {
       const code = (err as NodeJS.ErrnoException).code;
-      if (code === 'ECONNRESET' || code === 'EPIPE') {
+      // Only replay requests that are safe to repeat. A reset after the server
+      // accepted a POST/PATCH may mean it was already processed; retrying could
+      // create a second deployment, purge, or certificate.
+      if ((code === 'ECONNRESET' || code === 'EPIPE') && IDEMPOTENT_METHODS.has(options.method.toUpperCase())) {
         if (options.verbose > 0) {
           verboseLog(`Socket error (${code}), retrying with fresh connection…`);
         }

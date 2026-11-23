@@ -164,17 +164,27 @@ export function normalizeIfUnmodifiedSince(value: string): string {
  * Given a raw API response, extract the resource ID from the Location header
  * and enrich the response body with it.  Many CDN Pro POST endpoints return
  * the new resource's URL in the Location header rather than in the body.
+ *
+ * Throws when neither the body nor the Location header yields an ID: the
+ * resource was created, but printing `"undefined"` (or a JSON envelope with the
+ * ID key silently dropped) would hand scripts a result they cannot use.
  */
 export function enrichWithLocationId(
   raw: { obj: unknown; ctx: { _res: { headers: Record<string, string | string[] | undefined> } } },
 ): Record<string, unknown> {
-  const data = (raw.obj ?? {}) as Record<string, unknown>;
-  if (data['id'] !== undefined && data['id'] !== null) return data;
-  const location = raw.ctx._res.headers['location'] as string | undefined;
-  if (!location) return data;
-  const id = location.split('/').pop();
+  const data = (raw.obj !== null && typeof raw.obj === 'object' ? raw.obj : {}) as Record<string, unknown>;
+  if (data['id'] !== undefined && data['id'] !== null && data['id'] !== '') return data;
+  const header = raw.ctx._res.headers['location'];
+  const location = Array.isArray(header) ? header[0] : header;
+  // Ignore any query string/fragment and trailing slash before taking the last segment.
+  const id = location?.split(/[?#]/)[0].replace(/\/+$/, '').split('/').pop();
   if (id) {
     return { ...data, id };
   }
-  return data;
+  throw new CliError(
+    'ERROR',
+    'The request succeeded, but the server returned no resource ID (no "id" in the body and no ' +
+      'Location header). The resource may have been created; check it with the matching list command.',
+  );
 }
+

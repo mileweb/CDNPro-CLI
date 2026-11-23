@@ -98,9 +98,29 @@ export async function waitForTask(
     opts.outputFormat !== 'jsonl';
 
   const spinner = isInteractive ? ora(`Waiting for task ${taskId}…`).start() : null;
+  let consecutiveErrors = 0;
 
-  while (Date.now() < deadline) {
-    const task = (await getTask(taskId)) as Record<string, unknown>;
+  // Always poll at least once, and poll once more at the deadline: sleeping a
+  // full interval past it would overshoot --timeout, and skipping the last poll
+  // would report a timeout for a task that has just finished.
+  for (;;) {
+    let task: Record<string, unknown>;
+    try {
+      task = (await getTask(taskId)) as Record<string, unknown>;
+      consecutiveErrors = 0;
+    } catch (err) {
+      // The task keeps running server-side, so a transient failure (rate limit,
+      // 5xx, dropped connection) should not abort the wait.
+      consecutiveErrors += 1;
+      if (!isTransientPollError(err) || consecutiveErrors > MAX_CONSECUTIVE_POLL_ERRORS) {
+        if (spinner) spinner.fail(`Task ${taskId}: polling failed`);
+        throw err;
+      }
+      if (Date.now() >= deadline) break;
+      await sleepUntil(opts.pollInterval * 1000, deadline);
+      continue;
+    }
+
     const state = extractPollState(opts.taskType, task);
     const resolution = resolveTerminal(opts.taskType, state);
 
@@ -139,9 +159,62 @@ export async function waitForTask(
       );
     }
 
-    await new Promise<void>((resolve) => setTimeout(resolve, opts.pollInterval * 1000));
+    if (Date.now() >= deadline) break;
+    await sleepUntil(opts.pollInterval * 1000, deadline);
   }
 
   if (spinner) spinner.fail(`Task ${taskId} timed out after ${opts.timeout}s`);
   throw new CliError('TIMEOUT', `Task ${taskId} did not complete within ${opts.timeout}s`);
 }
+
+/** Give up after this many polling failures in a row. */
+const MAX_CONSECUTIVE_POLL_ERRORS = 3;
+
+/** Rate limiting, server errors, timeouts, and dropped connections are worth retrying. */
+function isTransientPollError(err: unknown): boolean {
+  const e = err as { code?: unknown; ctx?: { _res?: { statusCode?: number } } };
+  const status = e.ctx?._res?.statusCode;
+  if (typeof status === 'number') return status === 429 || status >= 500;
+  return (
+    e.code === 'ETIMEDOUT' ||
+    e.code === 'ECONNRESET' ||
+    e.code === 'EPIPE' ||
+    e.code === 'ECONNREFUSED' ||
+    e.code === 'EAI_AGAIN'
+  );
+}
+
+/** Sleep for `ms`, but never beyond the absolute `deadline` (epoch ms). */
+function sleepUntil(ms: number, deadline: number): Promise<void> {
+  const delay = Math.max(0, Math.min(ms, deadline - Date.now()));
+  return new Promise<void>((resolve) => setTimeout(resolve, delay));
+}
+
+export interface WaitFlagValues {
+  timeout?: string;
+  pollInterval?: string;
+}
+
+/**
+ * Parse and validate --timeout / --poll-interval. Call this BEFORE sending the
+ * create request: a bad value must not be discovered after the task exists.
+ * Values must be plain positive integers (so "10abc" and "1.5" are rejected).
+ */
+export function parseWaitOptions(
+  flags: WaitFlagValues,
+  defaults: { timeout: number; pollInterval: number },
+): { timeout: number; pollInterval: number } {
+  const parse = (value: string | undefined, fallback: number, flag: string): number => {
+    if (value === undefined) return fallback;
+    const parsed = Number(value);
+    if (!/^\d+$/.test(String(value).trim()) || !Number.isSafeInteger(parsed) || parsed < 1) {
+      throw new CliError('VALIDATION', `${flag} must be a positive integer, got: ${value}`, { cliFlag: flag });
+    }
+    return parsed;
+  };
+  return {
+    timeout: parse(flags.timeout, defaults.timeout, '--timeout'),
+    pollInterval: parse(flags.pollInterval, defaults.pollInterval, '--poll-interval'),
+  };
+}
+

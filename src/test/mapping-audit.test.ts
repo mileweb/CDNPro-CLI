@@ -84,25 +84,8 @@ function bodyPathExists(schema: unknown, path: string): boolean {
   return true;
 }
 
-/**
- * Known mismatches that are tracked but not yet fixed. Remove an entry when its
- * flag is fixed or dropped; the test also fails if an entry no longer applies.
- */
-const KNOWN_BODY_PATH_MISMATCHES = new Set([
-  'cert.update: --ca-only -> caOnly',
-  'report.l7-volume: --property <id> -> filters.propertyIds',
-  'report.l7-volume: --server-group <g> -> filters.serverGroups',
-  'report.l7-bandwidth: --property <id> -> filters.propertyIds',
-  'report.l7-bandwidth: --server-group <g> -> filters.serverGroups',
-  'report.l7-volume-summary: --property <id> -> filters.propertyIds',
-  'report.l7-volume-summary: --server-group <g> -> filters.serverGroups',
-  'report.l7-bandwidth-summary: --property <id> -> filters.propertyIds',
-  'report.l7-bandwidth-summary: --server-group <g> -> filters.serverGroups',
-]);
-
 test('every body-mapped flag targets a property that exists in the request schema', () => {
   const problems: string[] = [];
-  const seen = new Set<string>();
   for (const { resource, operation, mappings } of getAllMappings()) {
     const entry = lookupOperation(resource, operation);
     if (!entry) continue;
@@ -110,14 +93,9 @@ test('every body-mapped flag targets a property that exists in the request schem
     for (const m of mappings) {
       if (m.target !== 'body' || !m.param) continue;
       if (!schema || !bodyPathExists(schema, m.param)) {
-        const key = `${resource}.${operation}: ${m.flag} -> ${m.param}`;
-        if (KNOWN_BODY_PATH_MISMATCHES.has(key)) seen.add(key);
-        else problems.push(key);
+        problems.push(`${resource}.${operation}: ${m.flag} maps to unknown body path "${m.param}"`);
       }
     }
-  }
-  for (const key of KNOWN_BODY_PATH_MISMATCHES) {
-    if (!seen.has(key)) problems.push(`stale known-mismatch entry: ${key}`);
   }
   assert.deepEqual(problems, []);
 });

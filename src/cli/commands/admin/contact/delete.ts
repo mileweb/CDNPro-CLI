@@ -37,6 +37,7 @@ export function registerAdminContactDeleteCommand(parent: Command): void {
       const client = new CDNProClient(serverInfo);
 
       const reqOptions = {
+        ...(globals.onBehalfOf ? { onBehalfOf: globals.onBehalfOf } : {}),
         ...(globals.verbose ? { verbose: globals.verbose } : {}),
       };
 

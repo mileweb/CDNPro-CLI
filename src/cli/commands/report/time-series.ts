@@ -5,6 +5,7 @@ import { printResult, OutputFormat } from '../../output';
 import { handleError } from '../../errors';
 import { readBodyFile, validateRequestOrThrow } from '../../util';
 import { getExampleBody } from '../../../schema/synthesize';
+import { getParameterEnum } from '../../../schema/loader';
 import {
   OptionMapping,
   REPORT_RANGE,
@@ -14,6 +15,51 @@ import {
   registerMappings,
   checkRequiredMappings,
 } from '../../option-map';
+
+/** Which `filters` properties the endpoint's request body declares. */
+export type ReportFilterKind = 'standard' | 'l7' | 'edgeHostname';
+
+/**
+ * Body-filter flags for a report. The sets differ per endpoint in the spec:
+ * L7 reports have no propertyIds/serverGroups filter but add contentCodes, and
+ * the edge-hostname reports filter on edgeHostnames only. Offering a flag the
+ * endpoint does not declare would send a property the API ignores and return
+ * unfiltered data.
+ */
+export function reportFilterOptions(kind: ReportFilterKind): OptionMapping[] {
+  if (kind === 'edgeHostname') {
+    return [
+      { flag: '--edge-hostname <h>', target: 'body', param: 'filters.edgeHostnames', description: 'Filter by edge hostname; repeatable', repeatable: true },
+    ];
+  }
+  const hostname: OptionMapping = { flag: '--hostname <h>', target: 'body', param: 'filters.hostnames', description: 'Filter by client-facing hostname; repeatable', repeatable: true };
+  const propertyHostname: OptionMapping = { flag: '--property-hostname <h>', target: 'body', param: 'filters.propertyHostnames', description: 'Filter by property hostname pattern; repeatable', repeatable: true };
+  if (kind === 'l7') {
+    return [
+      hostname,
+      propertyHostname,
+      { flag: '--content-code <code>', target: 'body', param: 'filters.contentCodes', description: 'Filter by content code ($content_code in loadBalancerLogic); repeatable', repeatable: true },
+    ];
+  }
+  return [
+    hostname,
+    { flag: '--property <id>', target: 'body', param: 'filters.propertyIds', description: 'Filter by property ID; repeatable', repeatable: true },
+    propertyHostname,
+    { flag: '--server-group <g>', target: 'body', param: 'filters.serverGroups', description: 'Filter by server group; repeatable', repeatable: true },
+  ];
+}
+
+/** `--scheme` mapping whose help lists the values this endpoint's spec accepts. */
+export function reportSchemeOption(path: string): OptionMapping {
+  const accepted = getParameterEnum(path, 'post', 'query', 'scheme')?.values ?? ['http', 'https', 'all'];
+  const hasAll = accepted.includes('all');
+  return {
+    flag: '--scheme <scheme>',
+    target: 'query',
+    param: 'scheme',
+    description: `Traffic type: ${accepted.join(' | ')}${hasAll ? ' [default: all]' : ''}`,
+  };
+}
 
 /**
  * Register a time-series report subcommand.
@@ -29,7 +75,7 @@ export function registerTimeSeriesReportCommand(
   name: string,
   desc: string,
   path: string,
-  { noScheme = false, noReportRange = false, edgeHostnameFilter = false } = {},
+  { noScheme = false, noReportRange = false, filters = 'standard' as ReportFilterKind } = {},
 ): void {
   const options: OptionMapping[] = [
     { flag: '--from <date>',         target: 'query', param: 'startdate', description: 'Start date (RFC 3339 UTC)', required: true },
@@ -38,20 +84,8 @@ export function registerTimeSeriesReportCommand(
     ...FILE_EXAMPLE,
   ];
 
-  if (!noScheme) {
-    options.push({ flag: '--scheme <scheme>', target: 'query', param: 'scheme', description: 'Traffic type: http | https | all [default: all]' });
-  }
-
-  if (edgeHostnameFilter) {
-    options.push({ flag: '--edge-hostname <h>', target: 'body', param: 'filters.edgeHostnames', description: 'Filter by edge hostname; repeatable', repeatable: true });
-  } else {
-    options.push(
-      { flag: '--hostname <h>',          target: 'body', param: 'filters.hostnames',          description: 'Filter by client-facing hostname; repeatable',       repeatable: true },
-      { flag: '--property <id>',         target: 'body', param: 'filters.propertyIds',        description: 'Filter by property ID; repeatable',                   repeatable: true },
-      { flag: '--property-hostname <h>', target: 'body', param: 'filters.propertyHostnames',  description: 'Filter by property hostname pattern; repeatable',     repeatable: true },
-      { flag: '--server-group <g>',      target: 'body', param: 'filters.serverGroups',       description: 'Filter by server group; repeatable',                  repeatable: true },
-    );
-  }
+  if (!noScheme) options.push(reportSchemeOption(path));
+  options.push(...reportFilterOptions(filters));
 
   if (!noReportRange) {
     options.push(REPORT_RANGE);
