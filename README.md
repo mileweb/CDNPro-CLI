@@ -117,8 +117,6 @@ incidental exposure, but it cannot hide a payload from a caller running under th
   variable populated from your CI's secret store. Environment variables are less exposed than argv,
   but a same-user process can still read `/proc/<pid>/environ`. Secrets inside request bodies belong
   in `--file -` / a restricted file, as above.
-- `secret get` prints the stored secret text and `webhook get` prints `credentials.secretKey`, exactly
-  as the API returns them. Treat that output (and anything it is piped or logged to) as sensitive.
 - `-v`/`-vv` diagnostics go to **stderr**, so they never corrupt piped JSON. `-vv` redacts the
   `Authorization` header and sensitive body fields (`privateKey`, `secret`, `secretKey`, `apiKey`,
   passwords, tokens, PEM private keys). Redaction is best-effort — still treat logs as sensitive.
