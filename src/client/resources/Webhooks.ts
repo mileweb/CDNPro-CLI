@@ -1,4 +1,4 @@
-import { ApiCore, RequestOptions } from '../ApiCore';
+import { ApiCore, RequestOptions, pathSegment } from '../ApiCore';
 
 export class Webhooks {
   private api: ApiCore;
@@ -12,8 +12,7 @@ export class Webhooks {
   }
 
   get(id: string, reqOptions: RequestOptions = {}) {
-    if (!id) throw new Error('id is required');
-    return this.api.request('GET', `/cdn/webhooks/${encodeURIComponent(id)}`, reqOptions);
+    return this.api.request('GET', `/cdn/webhooks/${pathSegment(id, 'id')}`, reqOptions);
   }
 
   create(body: unknown, reqOptions: RequestOptions = {}) {
@@ -22,13 +21,11 @@ export class Webhooks {
   }
 
   update(id: string, patchBody: unknown, reqOptions: RequestOptions = {}) {
-    if (!id) throw new Error('id is required');
     if (!patchBody) throw new Error('patchBody is required');
-    return this.api.request('PATCH', `/cdn/webhooks/${encodeURIComponent(id)}`, { ...reqOptions, body: patchBody });
+    return this.api.request('PATCH', `/cdn/webhooks/${pathSegment(id, 'id')}`, { ...reqOptions, body: patchBody });
   }
 
   delete(id: string, reqOptions: RequestOptions = {}) {
-    if (!id) throw new Error('id is required');
-    return this.api.request('DELETE', `/cdn/webhooks/${encodeURIComponent(id)}`, reqOptions);
+    return this.api.request('DELETE', `/cdn/webhooks/${pathSegment(id, 'id')}`, reqOptions);
   }
 }

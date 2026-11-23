@@ -17,12 +17,12 @@ import {
 } from '../../option-map';
 
 export const PURGE_LIST_OPTIONS: OptionMapping[] = [
-  { flag: '--from <date>',             target: 'query', param: 'startDate',      description: 'Start date (RFC 3339 UTC)' },
-  { flag: '--to <date>',               target: 'query', param: 'endDate',        description: 'End date (RFC 3339 UTC)' },
+  { flag: '--from <date>',             target: 'query', param: 'startdate',      description: 'Start date (RFC 3339 UTC)' },
+  { flag: '--to <date>',               target: 'query', param: 'enddate',        description: 'End date (RFC 3339 UTC)' },
   { flag: '--target <env>',            target: 'query', param: 'target',         description: 'Filter by environment: staging | production' },
   { flag: '--action <action>',         target: 'query', param: 'action',         description: 'Filter by purge action: invalidate | delete' },
   { flag: '--search <term>',           target: 'query', param: 'search',         description: 'Match on hostname or purge task ID' },
-  { flag: '--max-success-rate <rate>', target: 'query', param: 'maxSuccessRate', description: 'Filter by max success rate (0-1)' },
+  { flag: '--max-success-rate <rate>', target: 'query', param: 'maxSuccessRate', description: 'Filter by max success rate, as a percentage (0-100)' },
   ...SORT_OPTIONS,
   ...PAGINATION_OPTIONS,
   REPORT_RANGE,
@@ -43,7 +43,7 @@ export function registerPurgeListCommand(parent: Command): void {
       const globals = cmdObj.optsWithGlobals<GlobalOptions>();
       const fmt = globals.output as OutputFormat | undefined;
 
-      const { query, reqOptions } = buildRequestFromMapping(opts, PURGE_LIST_OPTIONS);
+      const { query, reqOptions } = buildRequestFromMapping(opts, PURGE_LIST_OPTIONS, globals);
 
       const paging = resolveListPaging(opts, {
         resource: 'purge',

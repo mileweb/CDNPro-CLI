@@ -2,6 +2,7 @@ import * as https from 'https';
 import * as http from 'http';
 import * as zlib from 'zlib';
 import * as crypto from 'crypto';
+import { formatForLog } from './redact';
 
 export interface ServerInfo {
   host: string;
@@ -9,6 +10,8 @@ export interface ServerInfo {
   secretKey: string;
   family?: 4 | 6;
   scheme?: 'http' | 'https';
+  /** Override the default port for the scheme (mainly for tests and proxies). */
+  port?: number;
 }
 
 export interface RequestOptions {
@@ -55,8 +58,37 @@ interface ApiError extends Error {
   ctx?: ResponseContext;
 }
 
+/** A caller-supplied value the client refuses to put in a request (checked before any I/O). */
+export class InvalidArgumentError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'InvalidArgumentError';
+  }
+}
+
+/**
+ * Encode a caller-supplied value for use as ONE path segment. encodeURIComponent
+ * neutralises '/', '?', '#' and '%', but leaves '.' alone, so '..' would still
+ * climb a directory ("/cdn/certificates/../versions/1"). Empty values and the
+ * dot segments are rejected outright.
+ */
+export function pathSegment(value: string | number, name = 'id'): string {
+  if (value === undefined || value === null || value === '') throw new InvalidArgumentError(`${name} is required`);
+  const text = String(value);
+  if (text === '.' || text === '..') throw new InvalidArgumentError(`${name} must not be "." or ".."`);
+  return encodeURIComponent(text);
+}
+
 function isPlainObject(v: unknown): v is Record<string, unknown> {
   return v != null && typeof v === 'object' && !Array.isArray(v);
+}
+
+/**
+ * Verbose diagnostics are written to stderr so they never corrupt piped data
+ * output, and payloads are redacted so credentials do not reach logs.
+ */
+function verboseLog(message: string): void {
+  process.stderr.write(message + '\n');
 }
 
 function encodeQuery(query: Record<string, string | number | boolean | string[]>): string {
@@ -80,6 +112,8 @@ function withQuery(path: string, query?: Record<string, string | number | boolea
   if (path.includes('?')) return `${path}&${qs.slice(1)}`;
   return `${path}${qs}`;
 }
+
+const IDEMPOTENT_METHODS = new Set(['GET', 'HEAD', 'OPTIONS', 'PUT', 'DELETE']);
 
 interface AgentPool {
   http: http.Agent;
@@ -182,6 +216,8 @@ export class ApiCore {
     };
 
     if (serverInfo.family) out.family = serverInfo.family;
+    if (serverInfo.scheme) out.scheme = serverInfo.scheme;
+    if (serverInfo.port) out.port = serverInfo.port;
 
     if (options) {
       if (options.noCache === true) out.headers['Cache-Control'] = 'no-cache';
@@ -216,9 +252,9 @@ export class ApiCore {
 
     if (options.verbose > 1) {
       const portPart = options.port ? `:${options.port}` : '';
-      console.log(options.method, `${schemeStr}://${options.hostname}${portPart}${options.path}`);
-      console.log(options.headers);
-      if (body) console.log(body, '\n');
+      verboseLog(`${options.method} ${schemeStr}://${options.hostname}${portPart}${options.path}`);
+      verboseLog(formatForLog(options.headers));
+      if (body) verboseLog(formatForLog(body) + '\n');
     }
 
     const doRequest = (): Promise<RawResponse> => new Promise((resolve, reject) => {
@@ -232,29 +268,37 @@ export class ApiCore {
             (res.socket as unknown as tls.TLSSocket).getPeerCertificate?.();
         }
 
-        const statusOk = res.statusCode === 200 || res.statusCode === 201 || res.statusCode === 204;
+        const statusOk =
+          typeof res.statusCode === 'number' &&
+          res.statusCode >= 200 &&
+          res.statusCode < 300;
 
         let uncomp: zlib.Gunzip | zlib.BrotliDecompress | null = null;
         const ce = res.headers['content-encoding'];
         if (ce === 'br') uncomp = zlib.createBrotliDecompress();
         else if (ce === 'gzip') uncomp = zlib.createGunzip();
 
-        let data = '';
+        // Collect raw bytes and decode once at the end: converting each chunk to a
+        // string separately corrupts multi-byte UTF-8 characters split across chunks.
+        const chunks: Buffer[] = [];
         let len = 0;
+        let data = '';
 
         const finalProc = () => {
           const resTime = Date.now();
+          const decoded = Buffer.concat(chunks);
+          data = decoded.toString('utf8');
           ctx.times!.finish = resTime;
-          ctx.bodyBytes = { raw: len, decoded: data.length };
+          ctx.bodyBytes = { raw: len, decoded: decoded.length };
 
           if (options.verbose > 0) {
             const headerSec = (hdrTime - stime) / 1000;
             const totalSec = (resTime - stime) / 1000;
-            console.log(
+            verboseLog(
               `hdrTime ${headerSec}s, total ${totalSec}s, got status ${res.statusCode} w/ ${len} => ${data.length} bytes from ${options.method} ${options.hostname}${options.path}`,
             );
             if (options.verbose > 1 && statusOk === false) {
-              console.log(data);
+              verboseLog(formatForLog(data));
             }
           }
 
@@ -282,7 +326,7 @@ export class ApiCore {
         res.on('data', (chunk: Buffer) => {
           len += chunk.length;
           if (uncomp) uncomp.write(chunk);
-          else data += chunk;
+          else chunks.push(chunk);
         });
 
         res.on('end', () => {
@@ -291,8 +335,13 @@ export class ApiCore {
         });
 
         if (uncomp) {
-          uncomp.on('data', (chunk: Buffer) => { data += chunk; });
+          uncomp.on('data', (chunk: Buffer) => { chunks.push(chunk); });
           uncomp.on('end', finalProc);
+          uncomp.on('error', (err: Error) => {
+            const apiErr = err as ApiError;
+            apiErr.ctx = ctx as ResponseContext;
+            reject(apiErr);
+          });
         }
       });
 
@@ -332,9 +381,12 @@ export class ApiCore {
       return await doRequest();
     } catch (err) {
       const code = (err as NodeJS.ErrnoException).code;
-      if (code === 'ECONNRESET' || code === 'EPIPE') {
+      // Only replay requests that are safe to repeat. A reset after the server
+      // accepted a POST/PATCH may mean it was already processed; retrying could
+      // create a second deployment, purge, or certificate.
+      if ((code === 'ECONNRESET' || code === 'EPIPE') && IDEMPOTENT_METHODS.has(options.method.toUpperCase())) {
         if (options.verbose > 0) {
-          console.log(`Socket error (${code}), retrying with fresh connection…`);
+          verboseLog(`Socket error (${code}), retrying with fresh connection…`);
         }
         this._resetAgents();
         options.agent = (options.scheme === 'http' ? this._agents!.http : this._agents!.https);

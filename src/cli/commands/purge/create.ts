@@ -5,22 +5,23 @@ import { printCreateSuccess, OutputFormat } from '../../output';
 import { handleError } from '../../errors';
 import { CliError } from '../../errors';
 import { readBodyFile, enrichWithLocationId, checkRequiredOption, validateRequestOrThrow } from '../../util';
-import { waitForTask } from '../../wait';
+import { waitForTask, parseWaitOptions } from '../../wait';
 import { getNamedSpecExample } from '../../../schema/loader';
 import { getExampleBody } from '../../../schema/synthesize';
 import {
   OptionMapping,
   FILE_EXAMPLE,
   registerOptionsFromMapping,
+  checkFileConflicts,
   registerMappings,
 } from '../../option-map';
 
 export const PURGE_CREATE_OPTIONS: OptionMapping[] = [
   { flag: '--target <env>',            target: 'body',     param: 'target',          description: 'Environment to purge: staging | production', required: true },
-  { flag: '--url <url>',               target: 'body',     param: 'urls.urls',        description: 'Exact file URL to purge; repeatable', repeatable: true },
-  { flag: '--dir <url>',               target: 'body',     param: 'dirs.dirs',        description: 'Directory URL (supports * / **); repeatable; max 20', repeatable: true },
-  { flag: '--regex <pattern>',         target: 'body',     param: 'regex.regexes',    description: 'Regex pattern (scheme://hostname/...); repeatable; max 2', repeatable: true },
-  { flag: '--header <name:value>',     target: 'body',     param: 'urls.headers',     description: 'Request header for cache-key disambiguation; repeatable', repeatable: true },
+  { flag: '--url <url>',               target: 'body',     param: 'fileUrls',         description: 'Exact file URL to purge; repeatable', repeatable: true },
+  { flag: '--dir <url>',               target: 'body',     param: 'dirUrls',          description: 'Directory URL (supports * / **); repeatable; max 20', repeatable: true },
+  { flag: '--regex <pattern>',         target: 'body',     param: 'regexPatterns',    description: 'Regex pattern (scheme://hostname/...); repeatable; max 2', repeatable: true },
+  { flag: '--header <name:value>',     target: 'body',     param: 'fileHeaders',      description: 'Request header for cache-key disambiguation; repeatable', repeatable: true },
   { flag: '--action <action>',         target: 'body',     param: 'action',           description: 'Purge action: delete | invalidate [default: invalidate]' },
   { flag: '--name <description>',      target: 'body',     param: 'name',             description: 'Friendly name for the purge request' },
   { flag: '--webhook <id>',            target: 'body',     param: 'webhook',         description: 'Webhook ID to call on completion' },
@@ -56,7 +57,7 @@ export function registerPurgeCreateCommand(parent: Command): void {
     try {
       if (opts.example) {
         const example =
-          getNamedSpecExample('/cdn/purges', 'post', 'Purge by URL') ??
+          getNamedSpecExample('/cdn/purges', 'post', 'Purge specific files') ??
           getExampleBody('/cdn/purges', 'post');
         process.stdout.write(JSON.stringify(example, null, 2) + '\n');
         return;
@@ -68,6 +69,7 @@ export function registerPurgeCreateCommand(parent: Command): void {
       let body: unknown;
 
       if (opts.file) {
+        checkFileConflicts(opts, PURGE_CREATE_OPTIONS);
         body = readBodyFile(opts.file);
       } else {
         checkRequiredOption(opts.target, '--target <env>');
@@ -102,24 +104,18 @@ export function registerPurgeCreateCommand(parent: Command): void {
           target: opts.target,
         };
 
-        if (urls.length > 0) {
-          const urlsEntry: Record<string, unknown> = { urls };
-          if ((opts.header ?? []).length > 0) {
-            const headers: Record<string, string> = {};
-            for (const h of opts.header ?? []) {
-              const colonIdx = h.indexOf(':');
-              if (colonIdx < 1) {
-                throw new CliError('VALIDATION', `--header "${h}" must be in name:value format`);
-              }
-              headers[h.slice(0, colonIdx).trim()] = h.slice(colonIdx + 1).trim();
+        if (urls.length > 0) purgeBody['fileUrls'] = urls;
+        if ((opts.header ?? []).length > 0) {
+          purgeBody['fileHeaders'] = (opts.header ?? []).map((h) => {
+            const colonIdx = h.indexOf(':');
+            if (colonIdx < 1) {
+              throw new CliError('VALIDATION', `--header "${h}" must be in name:value format`);
             }
-            urlsEntry['headers'] = headers;
-          }
-          purgeBody['urls'] = urlsEntry;
+            return { name: h.slice(0, colonIdx).trim(), value: h.slice(colonIdx + 1).trim() };
+          });
         }
-
-        if (dirs.length > 0) purgeBody['dirs'] = { dirs };
-        if (regexes.length > 0) purgeBody['regex'] = { regexes };
+        if (dirs.length > 0) purgeBody['dirUrls'] = dirs;
+        if (regexes.length > 0) purgeBody['regexPatterns'] = regexes;
         purgeBody['action'] = action;
         if (opts.name) purgeBody['name'] = opts.name;
         if (opts.webhook) purgeBody['webhook'] = opts.webhook;
@@ -135,6 +131,10 @@ export function registerPurgeCreateCommand(parent: Command): void {
         globals.output,
         PURGE_CREATE_OPTIONS,
       );
+
+      // Validate --timeout/--poll-interval before the request: a bad value must not
+      // surface after the task has already been created.
+      const waitOpts = opts.wait ? parseWaitOptions(opts, { timeout: 600, pollInterval: 30 }) : undefined;
 
       const serverInfo = await resolveCredentials(globals);
       const client = new CDNProClient(serverInfo);
@@ -152,21 +152,19 @@ export function registerPurgeCreateCommand(parent: Command): void {
         const taskId = data['id'] as string | undefined;
         if (!taskId) throw new CliError('ERROR', 'Server did not return a task ID; cannot poll');
 
-        const timeout = parseInt(opts.timeout ?? '600', 10);
-        if (isNaN(timeout) || timeout < 1) {
-          throw new CliError('VALIDATION', `--timeout must be a positive integer, got: ${opts.timeout}`);
-        }
-        const pollInterval = parseInt(opts.pollInterval ?? '30', 10);
-        if (isNaN(pollInterval) || pollInterval < 1) {
-          throw new CliError('VALIDATION', `--poll-interval must be a positive integer, got: ${opts.pollInterval}`);
-        }
+        // Polling must carry the same On-Behalf-Of as the create call, or a reseller
+        // would poll their own account and fail after a successful create.
+        const pollReqOptions = {
+          ...(globals.onBehalfOf ? { onBehalfOf: globals.onBehalfOf } : {}),
+          verbose: globals.verbose ?? 0,
+        };
 
         printCreateSuccess('Purge', 'purgeId', String(taskId), fmt);
 
         await waitForTask(
-          (id) => client.purges.get(id, { verbose: globals.verbose ?? 0 }) as Promise<unknown>,
+          (id) => client.purges.get(id, pollReqOptions) as Promise<unknown>,
           String(taskId),
-          { taskType: 'purge', timeout, pollInterval, outputFormat: fmt },
+          { taskType: 'purge', ...waitOpts!, outputFormat: fmt },
         );
         return;
       }

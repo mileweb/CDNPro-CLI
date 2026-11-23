@@ -25,6 +25,14 @@ test('ca-only example is mode-specific', () => {
   assert.match(ex.newVersion.chainCert ?? '', /BEGIN CERTIFICATE/);
 });
 
+test('PATCH ca-only example does not carry caOnly', () => {
+  const ex = asExample(
+    getCertExample('/cdn/certificates/{certificateID}', 'patch', { kind: 'ca-only' }),
+  );
+  assert.equal(ex.caOnly, undefined);
+  assert.match(ex.newVersion.chainCert ?? '', /BEGIN CERTIFICATE/);
+});
+
 test('self-signed ECC256 example comes from the spec', () => {
   const ex = asExample(
     getCertExample('/cdn/certificates', 'post', { kind: 'self-signed', alg: 'ECC256' }),

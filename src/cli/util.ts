@@ -1,7 +1,9 @@
 import * as fs from 'fs';
-import { CliError } from './errors';
+import * as readline from 'readline';
+import { CliError, outputsHumanErrors } from './errors';
 import { OptionMapping, flagForBodyPath } from './option-map';
 import { validateBody, ValidationResult } from '../schema/validate';
+import { toHttpDate } from '../schema/date-time';
 
 /**
  * Read a JSON body from a file path or stdin ("-").
@@ -44,7 +46,7 @@ export function emitValidationError(
   mappings?: OptionMapping[],
 ): never {
   const errors = result.errors;
-  const isHuman = output == null ? process.stdout.isTTY : output === 'table';
+  const isHuman = outputsHumanErrors(output);
 
   if (isHuman) {
     process.stderr.write('Error: Invalid request body\n');
@@ -127,21 +129,98 @@ export function parseIntegerOption(value: string, flagName: string): number {
   return parsed;
 }
 
+export const OUTPUT_FORMATS = ['table', 'json', 'jsonl'] as const;
+
+/**
+ * Ask "<question> [y/N]" before a destructive action.
+ *
+ * - `--confirm` skips the prompt.
+ * - When stdout is not a terminal (scripts, agents) there is nobody to ask, so the
+ *   action proceeds without prompting; pass `--confirm` to make that explicit.
+ * - Declining, or stdin reaching EOF before an answer, aborts with a non-zero exit
+ *   so `cdnpro ... delete x && next-step` never continues after nothing was deleted.
+ */
+export async function confirmOrAbort(question: string, confirmed?: boolean): Promise<void> {
+  if (confirmed === true || !process.stdout.isTTY) return;
+
+  const answer = await new Promise<string | null>((resolve) => {
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    let answered = false;
+    rl.on('close', () => { if (!answered) resolve(null); });
+    rl.question(`${question} [y/N] `, (ans) => {
+      answered = true;
+      rl.close();
+      resolve(ans);
+    });
+  });
+
+  if (answer === null) {
+    throw new CliError(
+      'ERROR',
+      'No confirmation received (stdin closed). Re-run with --confirm to proceed non-interactively.',
+    );
+  }
+  if (!['y', 'yes'].includes(answer.trim().toLowerCase())) {
+    process.stderr.write('Aborted.\n');
+    throw new CliError('ERROR', 'Aborted.', undefined, true);
+  }
+}
+
+/** Reject unsupported --output values with exit code 4. */
+export function validateOutputOption(value: unknown): void {
+  if (value === undefined) return;
+  if (typeof value === 'string' && (OUTPUT_FORMATS as readonly string[]).includes(value)) return;
+  throw new CliError(
+    'VALIDATION',
+    `Invalid --output value: "${String(value)}". Allowed values: ${OUTPUT_FORMATS.join(', ')}`,
+    { cliFlag: '--output', allowedValues: OUTPUT_FORMATS },
+  );
+}
+
+/**
+ * Normalize --if-unmodified-since for the HTTP header. Accepts an HTTP-date
+ * (as returned by the API's Last-Modified) or an RFC 3339 date-time, which is
+ * converted to the equivalent UTC HTTP-date. Exits 4 on anything else.
+ */
+export function normalizeIfUnmodifiedSince(value: string): string {
+  const normalized = toHttpDate(value);
+  if (!normalized) {
+    throw new CliError(
+      'VALIDATION',
+      '--if-unmodified-since must be an HTTP-date ' +
+        '(e.g. "Thu, 01 Jan 2026 00:00:00 GMT") or an RFC 3339 date-time ' +
+        '(e.g. "2026-01-01T00:00:00Z")',
+      { cliFlag: '--if-unmodified-since' },
+    );
+  }
+  return normalized;
+}
+
 /**
  * Given a raw API response, extract the resource ID from the Location header
  * and enrich the response body with it.  Many CDN Pro POST endpoints return
  * the new resource's URL in the Location header rather than in the body.
+ *
+ * Throws when neither the body nor the Location header yields an ID: the
+ * resource was created, but printing `"undefined"` (or a JSON envelope with the
+ * ID key silently dropped) would hand scripts a result they cannot use.
  */
 export function enrichWithLocationId(
   raw: { obj: unknown; ctx: { _res: { headers: Record<string, string | string[] | undefined> } } },
 ): Record<string, unknown> {
-  const data = (raw.obj ?? {}) as Record<string, unknown>;
-  if (data['id'] !== undefined && data['id'] !== null) return data;
-  const location = raw.ctx._res.headers['location'] as string | undefined;
-  if (!location) return data;
-  const id = location.split('/').pop();
+  const data = (raw.obj !== null && typeof raw.obj === 'object' ? raw.obj : {}) as Record<string, unknown>;
+  if (data['id'] !== undefined && data['id'] !== null && data['id'] !== '') return data;
+  const header = raw.ctx._res.headers['location'];
+  const location = Array.isArray(header) ? header[0] : header;
+  // Ignore any query string/fragment and trailing slash before taking the last segment.
+  const id = location?.split(/[?#]/)[0].replace(/\/+$/, '').split('/').pop();
   if (id) {
     return { ...data, id };
   }
-  return data;
+  throw new CliError(
+    'ERROR',
+    'The request succeeded, but the server returned no resource ID (no "id" in the body and no ' +
+      'Location header). The resource may have been created; check it with the matching list command.',
+  );
 }
+

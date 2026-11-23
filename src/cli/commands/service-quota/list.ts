@@ -20,6 +20,9 @@ export const SERVICE_QUOTA_LIST_OPTIONS: OptionMapping[] = [
   { flag: '--status <status>',            target: 'query', param: 'status',            description: 'Filter by status: active | suspended | trial | terminated' },
   { flag: '--allow-production <bool>',    target: 'query', param: 'allowProduction',   description: 'Filter by production access: true | false' },
   { flag: '--advanced-features <features>', target: 'query', param: 'advancedFeatures', description: 'Filter by advanced features: realTimeLog | originShield' },
+  { flag: '--usage-limit',                 target: 'query', param: 'usageLimit',        description: 'Only quotas with non-zero usageLimitDays and usageLimitDollar', boolean: true },
+  { flag: '--allowed-cache-directives <directive>', target: 'query', param: 'allowedCacheDirectives', description: 'Only customers permitted to use this advanced Edge Logic directive' },
+  { flag: '--account-manager-email <email>', target: 'query', param: 'accountManagerEmail', description: 'Only quotas whose account manager email matches' },
   ...PAGINATION_OPTIONS,
   REPORT_RANGE,
   ALL,
@@ -39,7 +42,7 @@ export function registerServiceQuotaListCommand(parent: Command): void {
       const globals = cmdObj.optsWithGlobals<GlobalOptions>();
       const fmt = globals.output as OutputFormat | undefined;
 
-      const { query, reqOptions } = buildRequestFromMapping(opts, SERVICE_QUOTA_LIST_OPTIONS);
+      const { query, reqOptions } = buildRequestFromMapping(opts, SERVICE_QUOTA_LIST_OPTIONS, globals);
 
       const paging = resolveListPaging(opts, {
         resource: 'service-quota',

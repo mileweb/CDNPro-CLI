@@ -71,6 +71,16 @@ test('buildRequestFromMapping skips empty values and empty repeatables', () => {
   assert.equal(body, null);
 });
 
+test('buildRequestFromMapping forwards global on-behalf-of and verbose options', () => {
+  const { reqOptions } = buildRequestFromMapping(
+    {},
+    mappings,
+    { onBehalfOf: '123', verbose: 2 },
+  );
+
+  assert.deepEqual(reqOptions, { onBehalfOf: '123', verbose: 2 });
+});
+
 test('checkRequiredMappings rejects missing or empty required options', () => {
   const required: OptionMapping[] = [
     { flag: '--from <date>', target: 'query', param: 'startdate', description: '', required: true },

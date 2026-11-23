@@ -5,12 +5,14 @@ import { resolveCredentials, GlobalOptions } from '../../config';
 import { CDNProClient } from '../../../client/CDNProClient';
 import { handleError } from '../../errors';
 import { CliError } from '../../errors';
+import { printWriteResult } from '../../output';
 import { readBodyFile, checkRequiredOption, validateRequestOrThrow } from '../../util';
 import { getCertExample } from './example';
 import {
   OptionMapping,
   FILE_EXAMPLE,
   registerOptionsFromMapping,
+  checkFileConflicts,
   registerMappings,
 } from '../../option-map';
 
@@ -27,12 +29,14 @@ export const CERT_UPDATE_OPTIONS: OptionMapping[] = [
   { flag: '--country <CC>',      target: 'body', param: 'newVersion.identificationInfo.country',             description: '2-letter ISO-3166 country code' },
   { flag: '--state <state>',     target: 'body', param: 'newVersion.identificationInfo.state',               description: 'State or province' },
   { flag: '--city <city>',       target: 'body', param: 'newVersion.identificationInfo.city',                description: 'Locality' },
-  { flag: '--company <org>',     target: 'body', param: 'newVersion.identificationInfo.organization',         description: 'Organization' },
+  { flag: '--company <org>',     target: 'body', param: 'newVersion.identificationInfo.company',        description: 'Organization' },
   { flag: '--department <ou>',   target: 'body', param: 'newVersion.identificationInfo.department',           description: 'Organizational unit' },
   { flag: '--email <email>',     target: 'body', param: 'newVersion.identificationInfo.email',                description: 'Email address' },
   { flag: '--comments <text>',   target: 'body', param: 'newVersion.comments',               description: 'Version comments' },
   // CA-only mode
-  { flag: '--ca-only',           target: 'body', param: 'caOnly',                            description: 'Update CA chain certificate only', boolean: true },
+  // Selects CA-chain mode only; the PATCH schema has no caOnly property (a certificate's
+  // CA-only nature is fixed at creation), so nothing is sent for it.
+  { flag: '--ca-only',           target: 'cli-only', param: null,                            description: 'Add a new CA chain version (requires --ca)', boolean: true },
   // Full-body fallback
   ...FILE_EXAMPLE,
 ];
@@ -86,11 +90,7 @@ interface UpdateOpts {
 }
 
 function emitUpdateSuccess(id: string, globals: GlobalOptions): void {
-  if (!process.stdout.isTTY || globals.output) {
-    process.stdout.write(JSON.stringify({ success: true }) + '\n');
-  } else {
-    process.stderr.write(`Certificate version added for ${id}.\n`);
-  }
+  printWriteResult({ certificateId: id }, globals.output, `Certificate ${id} updated.`);
 }
 
 export function registerCertUpdateCommand(parent: Command): void {
@@ -127,10 +127,11 @@ export function registerCertUpdateCommand(parent: Command): void {
       const certId = id;
 
       const modeCount = [isUpload, isSelfSigned, isCaOnly, isFile].filter(Boolean).length;
-      if (modeCount === 0) {
+      // --name on its own renames the certificate without adding a version.
+      if (modeCount === 0 && !opts.name) {
         throw new CliError(
           'VALIDATION',
-          'One of --cert/--key (upload), --self-signed (generated), --ca-only (CA chain), or --file (full body) is required',
+          'One of --name (rename), --cert/--key (upload), --self-signed (generated), --ca-only (CA chain), or --file (full body) is required',
         );
       }
       if (modeCount > 1) {
@@ -141,6 +142,7 @@ export function registerCertUpdateCommand(parent: Command): void {
       }
 
       const globals = cmdObj.optsWithGlobals<GlobalOptions>();
+      if (isFile) checkFileConflicts(opts, CERT_UPDATE_OPTIONS);
 
       let body: Record<string, unknown>;
       let uploadKeyPem: string | undefined;
@@ -182,7 +184,7 @@ export function registerCertUpdateCommand(parent: Command): void {
         if (opts.country) identificationInfo['country'] = opts.country;
         if (opts.state) identificationInfo['state'] = opts.state;
         if (opts.city) identificationInfo['city'] = opts.city;
-        if (opts.company) identificationInfo['organization'] = opts.company;
+        if (opts.company) identificationInfo['company'] = opts.company;
         if (opts.department) identificationInfo['department'] = opts.department;
         if (opts.email) identificationInfo['email'] = opts.email;
 
@@ -197,12 +199,14 @@ export function registerCertUpdateCommand(parent: Command): void {
           ...(opts.name ? { name: opts.name } : {}),
           newVersion,
         };
+      } else if (!isCaOnly) {
+        // Rename only
+        body = { name: opts.name };
       } else {
-        // CA-only mode
+        // CA chain mode: a CA certificate's new version carries only chainCert.
         if (!opts.ca) throw new CliError('VALIDATION', '--ca <file> is required with --ca-only');
         const caPem = readPemFile(opts.ca, 'CA chain');
         body = {
-          caOnly: true,
           ...(opts.name ? { name: opts.name } : {}),
           newVersion: { chainCert: caPem },
         };

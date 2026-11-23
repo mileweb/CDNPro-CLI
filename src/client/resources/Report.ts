@@ -10,6 +10,12 @@ export class Report {
   post(endpointPath: string, { query = {}, body = {} }: { query?: Record<string, unknown>; body?: unknown } = {}, reqOptions: RequestOptions = {}) {
     if (!endpointPath) throw new Error('endpointPath is required');
     const path = endpointPath.startsWith('/cdn/report/') ? endpointPath : `/cdn/report/${endpointPath.replace(/^\/+/, '')}`;
+    // The path is spliced into the URL as-is, so it must stay inside /cdn/report/ and
+    // carry no query string or dot segments ('..' would otherwise escape the prefix).
+    const rest = path.slice('/cdn/report/'.length);
+    if (!rest || /[?#\\]/.test(path) || rest.split('/').some((s) => s === '' || s === '.' || s === '..')) {
+      throw new Error(`invalid report endpoint path: ${endpointPath}`);
+    }
     return this.api.request('POST', path, { ...reqOptions, query: query as RequestOptions['query'], body });
   }
 

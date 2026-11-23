@@ -16,7 +16,6 @@ import { Annotations } from './resources/Annotations';
 import { SystemConfigs } from './resources/SystemConfigs';
 import { Customers } from './resources/Customers';
 import { Geo } from './resources/Geo';
-import { ResourceSummary } from './resources/ResourceSummary';
 import { Hostnames } from './resources/Hostnames';
 import { HostnameHistory } from './resources/HostnameHistory';
 import { ApiPermissions } from './resources/ApiPermissions';
@@ -57,7 +56,6 @@ export class CDNProClient {
   purges: Purges;
   prefetches: Prefetches;
   geo: Geo;
-  resourceSummary: ResourceSummary;
   hostnames: Hostnames;
   hostnameHistory: HostnameHistory;
   apiPermissions: ApiPermissions;
@@ -88,7 +86,6 @@ export class CDNProClient {
     this.purges = new Purges(this._api);
     this.prefetches = new Prefetches(this._api);
     this.geo = new Geo(this._api);
-    this.resourceSummary = new ResourceSummary(this._api);
     this.hostnames = new Hostnames(this._api);
     this.hostnameHistory = new HostnameHistory(this._api);
     this.apiPermissions = new ApiPermissions(this._api);

@@ -7,6 +7,7 @@ import { resolveListPaging, paginateOffset } from '../../paginate';
 import {
   OptionMapping,
   PAGINATION_OPTIONS,
+  REPORT_RANGE,
   ALL,
   MAX_PAGES,
   registerOptionsFromMapping,
@@ -17,6 +18,7 @@ import {
 export const SECRET_LIST_OPTIONS: OptionMapping[] = [
   { flag: '--search <term>', target: 'query', param: 'search', description: 'Keyword search' },
   ...PAGINATION_OPTIONS,
+  REPORT_RANGE,
   ALL,
   MAX_PAGES,
 ];
@@ -34,7 +36,7 @@ export function registerSecretListCommand(parent: Command): void {
       const globals = cmdObj.optsWithGlobals<GlobalOptions>();
       const fmt = globals.output as OutputFormat | undefined;
 
-      const { query, reqOptions } = buildRequestFromMapping(opts, SECRET_LIST_OPTIONS);
+      const { query, reqOptions } = buildRequestFromMapping(opts, SECRET_LIST_OPTIONS, globals);
 
       const paging = resolveListPaging(opts, {
         resource: 'secret',

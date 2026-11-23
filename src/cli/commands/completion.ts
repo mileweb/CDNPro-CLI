@@ -184,7 +184,7 @@ _cdnpro() {
     --status)
       case "$cmd" in
         deploy)        COMPREPLY=($(compgen -W "waiting inprogress failed succeeded" -- "$cur"));;
-        validation)    COMPREPLY=($(compgen -W "waiting in-progress failed succeeded" -- "$cur"));;
+        validation)    COMPREPLY=($(compgen -W "waiting 'in progress' failed succeeded" -- "$cur")); compopt -o filenames 2>/dev/null;;
         service-quota) COMPREPLY=($(compgen -W "active suspended trial terminated" -- "$cur"));;
         admin)
           case "$sub" in
@@ -233,7 +233,7 @@ _cdnpro() {
       validation)
         case "$sub" in
           list)   flags="--from --to --property --property-version --status --search --sort-by --sort-order --limit --offset --all --max-pages --report-range";;
-          create) flags="--file --wait --timeout --poll-interval";;
+          create) flags="--property-id --property-version --name --webhook --file --example --wait --timeout --poll-interval";;
         esac;;
       edge-hostname)
         case "$sub" in
@@ -253,13 +253,16 @@ _cdnpro() {
         case "$sub" in
           create) flags="--name --url --region --start-time --webhook --file --example --wait --timeout --poll-interval";;
           list)   flags="--from --to --search --sort-by --sort-order --limit --offset --all --max-pages --report-range";;
-          tokens) flags="--target";;
         esac;;
       report)
         case "$sub" in
-          logs)      flags="--from --to --hostname --file";;
-          *-summary) flags="--from --to --scheme --hostname --property --property-hostname --server-group --group-by --file";;
-          *)         flags="--from --to --type --scheme --hostname --property --property-hostname --server-group --file --report-range";;
+          logs)      flags="--from --to --hostname --file --example";;
+          edge-hostname-requests-summary) flags="--from --to --edge-hostname --file --example";;
+          edge-hostname-requests)         flags="--from --to --type --edge-hostname --file --example";;
+          l7-*-summary) flags="--from --to --hostname --property-hostname --content-code --group-by --file --example --report-range";;
+          l7-*)      flags="--from --to --type --hostname --property-hostname --content-code --file --example --report-range";;
+          *-summary) flags="--from --to --scheme --hostname --property --property-hostname --server-group --group-by --file --example";;
+          *)         flags="--from --to --type --scheme --hostname --property --property-hostname --server-group --file --example --report-range";;
         esac;;
       log-config)
         case "$sub" in
@@ -281,11 +284,11 @@ _cdnpro() {
         esac;;
       hostname)
         case "$sub" in
-          list)    flags="--search --target --limit --offset --all --max-pages --report-range";;
+          list)    flags="--target --limit --offset --all --max-pages --report-range";;
         esac;;
       hostname-history)
         case "$sub" in
-          list) flags="--from --to --search --target --limit --offset --all --max-pages --report-range";;
+          list) flags="--from --to --search --target --limit --offset --all --max-pages";;
           get)  flags="--from --to --target";;
         esac;;
       webhook)
@@ -858,7 +861,7 @@ Register-ArgumentCompleter -Native -CommandName @('cdnpro') -ScriptBlock {
       '--status' {
         switch ($cmd) {
           'deploy'        { Complete @('waiting','inprogress','failed','succeeded'); return }
-          'validation'    { Complete @('waiting','in-progress','failed','succeeded'); return }
+          'validation'    { Complete @('waiting','in progress','failed','succeeded'); return }
           'service-quota' { Complete @('active','suspended','trial','terminated'); return }
         }
       }
@@ -876,8 +879,8 @@ Register-ArgumentCompleter -Native -CommandName @('cdnpro') -ScriptBlock {
       'property-version/list'   { @('--search','--sort-by','--sort-order','--limit','--offset','--all','--max-pages') }
       'property-version/create' { @('--file','--example') }
       'property-version/update' { @('--file','--example','--if-unmodified-since') }
-      'hostname/list'           { @('--search','--target','--limit','--offset','--all','--max-pages','--report-range') }
-      'hostname-history/list'   { @('--from','--to','--search','--target','--limit','--offset','--all','--max-pages','--report-range') }
+      'hostname/list'           { @('--target','--limit','--offset','--all','--max-pages','--report-range') }
+      'hostname-history/list'   { @('--from','--to','--search','--target','--limit','--offset','--all','--max-pages') }
       'hostname-history/get'    { @('--from','--to','--target') }
       'update/'                 { @('--check','--yes') }
       'cert/list'               { @('--search','--target','--ca-only','--auto-renew','--sort-by','--sort-order','--limit','--offset','--all','--max-pages','--report-range') }
@@ -886,7 +889,7 @@ Register-ArgumentCompleter -Native -CommandName @('cdnpro') -ScriptBlock {
       'deploy/list'             { @('--from','--to','--target','--status','--property','--cert','--search','--task-ids','--sort-by','--sort-order','--limit','--offset','--all','--max-pages','--report-range') }
       'deploy/create'           { @('--target','--deploy-property','--remove-property','--deploy-cert','--remove-cert','--name','--webhook','--file','--wait','--timeout','--poll-interval','--skip-certificate-check','--skip-client-ca-certificate-check','--skip-origin-auth-certificate-check','--skip-usage-check','--example') }
       'validation/list'         { @('--from','--to','--property','--property-version','--status','--search','--sort-by','--sort-order','--limit','--offset','--all','--max-pages','--report-range') }
-      'validation/create'       { @('--file','--wait','--timeout','--poll-interval') }
+      'validation/create'       { @('--property-id','--property-version','--name','--webhook','--file','--example','--wait','--timeout','--poll-interval') }
       'edge-hostname/list'      { @('--search','--has-beian','--server-groups','--sort-by','--sort-order','--limit','--offset','--all','--max-pages','--report-range') }
       { $_ -in 'edge-hostname/create' } { @('--file','--example') }
       { $_ -in 'edge-hostname/update','edge-hostname/replace' } { @('--file','--if-unmodified-since') }
@@ -897,10 +900,13 @@ Register-ArgumentCompleter -Native -CommandName @('cdnpro') -ScriptBlock {
       'purge/tokens'            { @('--target') }
       'prefetch/create'         { @('--name','--url','--region','--start-time','--webhook','--file','--example','--wait','--timeout','--poll-interval') }
       'prefetch/list'           { @('--from','--to','--search','--sort-by','--sort-order','--limit','--offset','--all','--max-pages','--report-range') }
-      'prefetch/tokens'         { @('--target') }
-      'report/logs'             { @('--from','--to','--hostname','--file') }
-      { $sub -like '*-summary'  } { @('--from','--to','--scheme','--hostname','--property','--property-hostname','--server-group','--group-by','--file') }
-      { $cmd -eq 'report'       } { @('--from','--to','--type','--scheme','--hostname','--property','--property-hostname','--server-group','--file','--report-range') }
+      'report/logs'             { @('--from','--to','--hostname','--file','--example'); break }
+      { $sub -like 'edge-hostname-requests-summary' } { @('--from','--to','--edge-hostname','--file','--example'); break }
+      { $sub -like 'edge-hostname-requests' } { @('--from','--to','--type','--edge-hostname','--file','--example'); break }
+      { $sub -like 'l7-*-summary' } { @('--from','--to','--hostname','--property-hostname','--content-code','--group-by','--file','--example','--report-range'); break }
+      { $sub -like 'l7-*'       } { @('--from','--to','--type','--hostname','--property-hostname','--content-code','--file','--example','--report-range'); break }
+      { $sub -like '*-summary'  } { @('--from','--to','--scheme','--hostname','--property','--property-hostname','--server-group','--group-by','--file','--example'); break }
+      { $cmd -eq 'report'       } { @('--from','--to','--type','--scheme','--hostname','--property','--property-hostname','--server-group','--file','--example','--report-range'); break }
       'schema/'                 { @('--direction') }
       default                   { @() }
     }

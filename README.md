@@ -41,7 +41,7 @@ npm install -g .
 
 CDNPro CLI resolves credentials in this order:
 
-1. CLI flags: `--host`, `--user`, `--secret-key`
+1. CLI flags: `--host`, `--user`, `--secret-key` (all three together; supplying only some is an error)
 2. Environment variables: `CDNPRO_HOST`, `CDNPRO_USER`, `CDNPRO_SECRETKEY`
 3. Named profile (via `--profile <name>` or `CDNPRO_PROFILE` env var)
 4. The saved profile marked `(default)` in `cdnpro auth list`
@@ -89,12 +89,43 @@ When `--profile` is omitted, the command chooses a profile in this order:
 
 Saved profiles are not used when explicit credentials are supplied. That is `--host`, `--user`, and `--secret-key` together, or `CDNPRO_HOST`, `CDNPRO_USER`, and `CDNPRO_SECRETKEY` together.
 
+- Passing only some of `--host`, `--user`, `--secret-key` exits with code 9 rather than silently using a saved profile (which would send that profile's user to the host you named).
+- If only some of the `CDNPRO_*` credential variables are set, they are ignored with a warning and the saved profile is used.
+- An explicit `--profile <name>` takes precedence over complete `CDNPRO_*` credentials, since it is the more specific request.
+
 Credentials are stored securely:
 - **Secret key** — stored in the OS keychain (macOS Keychain, Windows Credential Manager, Linux Secret Service). If the keychain is unavailable (headless server, CI), a one-time warning is shown and the secret falls back to the config file.
-- **Host and username** — stored in the config file:
+- **Host and username** — stored in the config file (when the secret falls back to this file on Linux/macOS, the file is restricted to mode 0600):
   - Linux: `~/.config/cdnpro-nodejs/config.json`
   - macOS: `~/Library/Preferences/cdnpro-nodejs/config.json`
   - Windows: `%APPDATA%\cdnpro-nodejs\Config\config.json`
+
+### Handling secrets in request bodies
+
+Create/update bodies for certificates, certificate versions, secrets, webhooks, contacts, and admin
+accounts can contain sensitive values (private keys, secret text, API keys, PII). The CLI limits
+incidental exposure, but it cannot hide a payload from a caller running under the same OS account.
+
+- Prefer `--file -` to read the body from stdin, e.g. `cdnpro secret create --file - < secret.json`,
+  so the plaintext need not be written to disk.
+- If you use a file, restrict it: `chmod 600 secret.json`. The CLI does not check file
+  permissions; securing the file is the caller's responsibility. (Windows ACLs work the same way
+  but are not inspected either.)
+- Keep secrets out of command-line arguments: argv is visible to other processes (`ps`) and often to
+  shell history. That includes the global `--secret-key` flag, so for your *API credentials* prefer a
+  saved profile (the secret goes to the OS keychain) and, for CI, the `CDNPRO_SECRETKEY` environment
+  variable populated from your CI's secret store. Environment variables are less exposed than argv,
+  but a same-user process can still read `/proc/<pid>/environ`. Secrets inside request bodies belong
+  in `--file -` / a restricted file, as above.
+- `secret get` prints the stored secret text and `webhook get` prints `credentials.secretKey`, exactly
+  as the API returns them. Treat that output (and anything it is piped or logged to) as sensitive.
+- `-v`/`-vv` diagnostics go to **stderr**, so they never corrupt piped JSON. `-vv` redacts the
+  `Authorization` header and sensitive body fields (`privateKey`, `secret`, `secretKey`, `apiKey`,
+  passwords, tokens, PEM private keys). Redaction is best-effort — still treat logs as sensitive.
+- Success response bodies are never written to the diagnostic log.
+- For AI agents and other automation, run the CLI under a separate OS account, or through a
+  wrapper/credential broker, that can read the secret while the agent cannot. A same-user agent can
+  read any file the CLI can read; the CLI cannot enforce that boundary.
 
 ## Global Options
 
@@ -106,10 +137,15 @@ These options are available on every command:
 | `--host <host>` | Override API host |
 | `--user <user>` | Override API username |
 | `--secret-key <key>` | Override API secret key |
-| `-o, --output <format>` | Output format: `table`, `json`, or `jsonl` |
+| `-o, --output <format>` | Output format: `table`, `json`, or `jsonl` (anything else exits 4) |
 | `--no-color` | Disable colored output |
-| `-v, --verbose` | Increase verbosity (`-vv` for more) |
+| `-v, --verbose` | Increase verbosity (`-vv` prints redacted HTTP diagnostics to stderr) |
 | `--on-behalf-of <id>` | Reseller: act on behalf of a customer |
+
+Enumerated option values (e.g. `--target`, `--status`, `--action`) and date-time options (e.g.
+`--from`, `--to`, `--start-time`) are validated against the OpenAPI spec before the request is
+sent. Date-times must be RFC 3339 with a timezone. An invalid value exits with code 4 and lists the
+accepted values or expected format.
 
 ## Output Formats
 
@@ -118,6 +154,11 @@ These options are available on every command:
 | `table` | `list` commands in interactive TTY (default) | Human-readable ASCII table |
 | `json` | Piped/non-TTY (default), and all non-list commands | Single JSON envelope |
 | `jsonl` | Explicit `--output jsonl` | One JSON object per line (streaming) |
+
+Machine output uses one top-level shape: `{"data": ...}` on success and `{"error": ...}` on
+failure. List/create/update/delete results all live under `data`; for writes it is
+`{"data": {"success": true, ...identifiers}}`, e.g. `.data.propertyId`. An interactive TTY without
+an explicit `--output` prints human messages to stderr instead.
 
 ### Pagination and `--all`
 
@@ -141,6 +182,23 @@ JSONL:
   error (exit code 1).
 
 ## Commands
+
+**Behaviour shared by many commands**
+
+- **`--confirm` on `delete`.** Every `delete` command asks `[y/N]` in an interactive terminal; `--confirm`
+  skips the prompt. When stdout is not a terminal (scripts, agents) there is no prompt and the delete
+  proceeds, so pass `--confirm` to make that intent explicit. Answering no, or closing stdin before
+  answering, exits with code 1 and deletes nothing.
+- **`--if-unmodified-since <date>` on updates.** `update` (and `edge-hostname replace`) for properties,
+  property versions, edge hostnames, secrets, webhooks, log configs, log aggregation points, service
+  quotas, and API permissions sends `If-Unmodified-Since`, so the change fails with exit code 10
+  (precondition failed) if the resource changed since you read it. Accepts an HTTP-date (the API's
+  `Last-Modified`) or an RFC 3339 date-time.
+- **`--file` is exclusive.** `--file` supplies the whole request body. Combining it with flags that
+  build body content (for example `purge create --file p.json --url ...`) is an error (exit code 4)
+  instead of silently ignoring one of them. Flags that map to query parameters or headers still apply.
+- **Terminal output is sanitized.** In table output, control characters in API-supplied text are shown
+  as `\xNN` escapes so they cannot manipulate your terminal. JSON/JSONL output is unaffected.
 
 ### Properties
 
@@ -186,6 +244,7 @@ cdnpro cert create --name <name> [--file <path>] [--example]
                    # CA-only mode:
                    --ca-only --ca <file> [--comments <text>]
 cdnpro cert update <id> [--name <name>] [--file <path>] [--example]
+                        # --name alone renames the certificate (no new version)
                         # Upload mode, self-signed mode, CA-only mode:
                         # same flags as `cert create`
 cdnpro cert delete <id>
@@ -302,14 +361,14 @@ cdnpro deploy create (--target <staging|production>
 | `--timeout <seconds>` | Max wait time (default: 600) |
 | `--poll-interval <seconds>` | Poll frequency in seconds (default: 30) |
 
-The `--wait` flag shows a spinner in a TTY and NDJSON progress lines when piped.
+The `--wait` flag shows a spinner in a TTY and NDJSON progress lines when piped. `--timeout` and `--poll-interval` must be positive integers and are validated before the request is sent. Polling carries `--on-behalf-of`, makes a final poll at the deadline, and tolerates a few transient errors (429, 5xx, dropped connections) while the task keeps running. If the server returns no resource ID for a created resource, the command exits 1 instead of printing an empty ID.
 
 ### Validation
 
 ```bash
 cdnpro validation list [--from <date>] [--to <date>] [--property <id>]
                       [--property-version <version>]
-                      [--status <waiting|in-progress|failed|succeeded>]
+                      [--status <waiting|"in progress"|failed|succeeded>]
                       [--search <keyword>] [--sort-by <field>]
                       [--sort-order <asc|desc>] [--limit <n>] [--offset <n>]
                       [--report-range <scope>] [--all]
@@ -333,12 +392,12 @@ cdnpro purge list [--from <date>] [--to <date>] [--target <staging|production>]
                   [--sort-order <asc|desc>] [--limit <n>] [--offset <n>]
                   [--report-range <scope>] [--all]
 cdnpro purge get <id>
-cdnpro purge summary
+cdnpro purge summary --from <date> --to <date> [--target <staging|production>]
 cdnpro purge tokens
-cdnpro purge create --target <staging|production> [--url <url>] [--dir <dir>] [--regex <pattern>] [--file <path>] [--example] [--wait] [--timeout <seconds>] [--poll-interval <seconds>]
+cdnpro purge create --target <staging|production> [--url <url>] [--dir <dir>] [--regex <pattern>] [--header <name:value>] [--action <invalidate|delete>] [--name <text>] [--webhook <id>] [--file <path>] [--example] [--wait] [--timeout <seconds>] [--poll-interval <seconds>]
 ```
 
-`purge create` requires at least one of `--url`, `--dir`, `--regex`, or `--file`; `--target` is required unless `--file` is used (the body file must contain it).
+`purge create` requires at least one of `--url`, `--dir`, `--regex`, or `--file`; `--target` is required unless `--file` is used (the body file must contain it). `--header` (repeatable, `name:value`) selects which cached variant of the `--url` files to purge and requires at least one `--url`. `--action` defaults to `invalidate`; `--dir` accepts at most 20 entries and `--regex` at most 2.
 
 #### Prefetch
 
@@ -365,20 +424,20 @@ cdnpro edge-hostname get <id>
 cdnpro edge-hostname create --file <path>
 cdnpro edge-hostname update <id> --file <path>
 cdnpro edge-hostname replace <id> --file <path>
-cdnpro edge-hostname delete <id>
+cdnpro edge-hostname delete <id> [--skip-usage-check] [--confirm]   # --skip-usage-check sends Check-Usage: no
 ```
 
 ### Hostnames
 
 ```bash
-cdnpro hostname list [--search <keyword>] [--target <all|staging|production>]
+cdnpro hostname list [--target <all|staging|production>]
                      [--limit <n>] [--offset <n>] [--report-range <scope>]
                      [--all]
 cdnpro hostname get <hostname>
 ```
 
 ```bash
-cdnpro hostname-history list [--search <keyword>] [--from <date>] [--to <date>] [--target <staging|production|all>] [--limit <n>] [--offset <n>] [--report-range <scope>] [--all]
+cdnpro hostname-history list [--search <keyword>] [--from <date>] [--to <date>] [--target <staging|production|all>] [--limit <n>] [--offset <n>] [--all]
 cdnpro hostname-history get <hostname> [--from <date>] [--to <date>] [--target <staging|production|all>]
 ```
 
@@ -387,7 +446,7 @@ cdnpro hostname-history get <hostname> [--from <date>] [--to <date>] [--target <
 #### Secrets
 
 ```bash
-cdnpro secret list [--search <keyword>] [--limit <n>] [--offset <n>] [--all]
+cdnpro secret list [--search <keyword>] [--limit <n>] [--offset <n>] [--report-range <scope>] [--all]
 cdnpro secret get|create|update|delete
 ```
 
@@ -410,13 +469,14 @@ cdnpro log-config get|create|update|delete
 
 ```bash
 cdnpro log-aggregation-point list [--search <keyword>]
-cdnpro log-aggregation-point get|create|update|delete|summary
+cdnpro log-aggregation-point get|create|update|delete
+cdnpro log-aggregation-point summary --from <date> --to <date>
 ```
 
 #### Annotations
 
 ```bash
-cdnpro annotation list [--from <date>] [--to <date>] [--type <client|configuration|operation>]
+cdnpro annotation list --from <date> --to <date> [--type <client|configuration|operation>]
                        [--search <keyword>] [--limit <n>] [--offset <n>]
                        [--report-range <scope>] [--all]
 cdnpro annotation get|create|update|delete
@@ -427,7 +487,9 @@ cdnpro annotation get|create|update|delete
 ```bash
 cdnpro service-quota list [--search <keyword>] [--status <active|suspended|trial|terminated>]
                           [--allow-production <true|false>]
-                          [--advanced-features <features>] [--limit <n>]
+                          [--advanced-features <features>] [--usage-limit]
+                          [--allowed-cache-directives <directive>]
+                          [--account-manager-email <email>] [--limit <n>]
                           [--offset <n>] [--report-range <scope>] [--all]
 cdnpro service-quota get|update
 ```
@@ -460,13 +522,16 @@ cdnpro origin-fast-route-ip list      # Origin fast-route IPs
 cdnpro ip-details lookup --file <path>            # IP geolocation details
 ```
 
+`public-ip list` and `origin-fast-route-ip list` merge IPv4 and IPv6 ranges into
+`{ "ip": ..., "version": 4 | 6 }` items; `meta` carries `lastUpdated` and `effectiveDate`.
+
 ### Reports
 
 All report commands require `--from` and `--to` (RFC 3339 UTC dates).
 
 #### Time-series reports
 
-Require `--type <granularity>` (`fiveminutes` | `hourly` | `daily` | `monthly`). Most accept `--hostname`, `--property`, `--property-hostname`, `--server-group` (all repeatable), `--scheme` (`http` | `https` | `all`), and `--report-range`.
+Require `--type <granularity>` (`fiveminutes` | `hourly` | `daily` | `monthly`). Most accept `--hostname`, `--property`, `--property-hostname`, `--server-group` (all repeatable), `--scheme` (`http` | `https` | `all`), and `--report-range`. The L7 reports (`l7-volume`, `l7-bandwidth`) accept only `--hostname`, `--property-hostname`, and `--content-code` (repeatable) plus `--report-range`; `edge-hostname-requests` filters on `--edge-hostname`.
 
 ```bash
 cdnpro report edge-bandwidth --from <date> --to <date> --type <granularity>
@@ -488,7 +553,7 @@ cdnpro report edge-hostname-requests --from <date> --to <date> --type <granulari
 
 #### Summary reports
 
-Do not take `--type`. Most accept the same filters as time-series reports, plus `--group-by` (repeatable, up to 2: `hostnames` | `serverGroups` | `customerIds` | `propertyHostnames` | `legacyTypes`).
+Do not take `--type`. Most accept the same filters as time-series reports, plus `--group-by` (repeatable). The accepted `--group-by` values, the item limit, and whether `--scheme` allows `all` differ per endpoint; `cdnpro report <name> --help` lists them for that endpoint (they come from the API spec). The L7 summaries take `--hostname`, `--property-hostname`, `--content-code`, `--group-by`, and `--report-range`.
 
 ```bash
 cdnpro report edge-bandwidth-summary --from <date> --to <date>
@@ -561,7 +626,7 @@ cdnpro admin apicall list [--from <date>] [--to <date>]
                           [--limit <n>] [--report-range <scope>] [--all]
 cdnpro admin apicall counts [--from <date>] [--to <date>]
                             [--path <prefix>] [--by-me-only]
-cdnpro admin apicall get
+cdnpro admin apicall get <id>
 ```
 
 ### Schema Introspection
@@ -691,7 +756,7 @@ npm install /path/to/CDNPro-CLI
 import { CDNProClient } from 'cdnpro-cli';
 
 const client = new CDNProClient({
-  host: 'api.cdnetworks.com',
+  host: 'ngapi.cdnetworks.com',
   user: 'your-username',
   secretKey: 'your-secret-key',
 });
@@ -699,21 +764,30 @@ const client = new CDNProClient({
 // List properties
 const properties = await client.properties.list();
 
-// Create a deployment
-const task = await client.deployments.create({
-  target: 'production',
-  actions: [
-    { action: 'deploy_property', propertyId: 'abc123', version: '2' },
-  ],
-});
+// Create a deployment. The new task's ID is returned in the Location header, so ask
+// for the raw response ({ obj, ctx }) to read it.
+const rsp = (await client.deployments.create(
+  {
+    target: 'production',
+    actions: [{ action: 'deploy_property', propertyId: 'abc123', version: '2' }],
+  },
+  { raw: true },
+)) as {
+  obj: { id?: string } | null;
+  ctx: { _res: { headers: Record<string, string | string[] | undefined> } };
+};
+const location = rsp.ctx._res.headers['location'];
+const taskId = rsp.obj?.id ?? String(location).split('/').pop()!;
 
 // Poll for completion
-let result = await client.deployments.get(task.id);
+let result = (await client.deployments.get(taskId)) as { status: string };
 while (result.status !== 'succeeded' && result.status !== 'failed') {
   await new Promise(r => setTimeout(r, 30_000));
-  result = await client.deployments.get(task.id);
+  result = (await client.deployments.get(taskId)) as { status: string };
 }
 ```
+
+Path IDs you pass to the client are URL-encoded, and empty values and `.`/`..` are rejected.
 
 ## OpenAPI Spec (`openapi.json`)
 
@@ -743,7 +817,7 @@ The spec is loaded once and cached in memory the first time any schema function 
   - The `github.com/.../blob/...` page is deliberately **not** used as a source: it has an ETag, but for the HTML page rather than the file, and it contains no file body (the spec is too large for GitHub to render).
   - Unauthenticated, the API allows 60 requests/hour per IP (304 responses count too). Set `GITHUB_TOKEN` (or `GH_TOKEN`) to raise that; it is sent to `api.github.com` only, and is retried without the token if GitHub rejects it with 401.
 - If the check or download fails and `openapi.json` already exists, the existing copy is kept (with a warning), so offline builds still work. If it does not exist, the build stops with an error.
-- `npm pack` / `npm publish` run a `prepack` hook that fetches the spec first, so the package always contains a current `openapi.json`. If the spec is missing and cannot be downloaded, packing aborts instead of producing a broken package. (`prepack` does not run `npm run build`; build before publishing so `dist/` is up to date.)
+- `npm pack` / `npm publish` run a `prepack` hook that runs the full build (fetch the spec, regenerate types, clean `dist/`, compile), so the package always contains a current `openapi.json` and a `dist/` that matches the sources, with no leftovers from deleted files. If the spec is missing and cannot be downloaded, packing aborts instead of producing a broken package. `npm run build` and `npm test` also clean `dist/` first.
 - The source follows the `master` branch, so every build picks up the latest published spec. To use a different location, set `OPENAPI_SPEC_URL` (a `github.com/.../blob/...` page URL is accepted and converted to the raw URL automatically).
 - `src/types/api.ts` is still committed and is regenerated on every build, so it will show up as modified after a build that picked up a newer spec.
 
@@ -757,7 +831,7 @@ The spec is loaded once and cached in memory the first time any schema function 
 2. **Rebuild** — run `npm run build` so `dist/` is compiled against the updated spec.
 3. **Update `OPERATION_MAP`** if you added or removed endpoints — open `src/schema/query.ts` and add/remove entries so the new operations are reachable via `cdnpro schema` and `--example`.
 4. **Add `OptionMapping[]`** for any new command — each command file exports its CLI flags as an `OptionMapping[]` array and calls `registerMappings()` so `cdnpro schema` can annotate parameters with `cliFlag` and `bodyCliFlags`. Use shared presets (`PAGINATION_OPTIONS`, `SORT_OPTIONS`, `FILE_EXAMPLE`, `CONFIRM`, etc.) from `src/cli/option-map.ts`.
-5. **Run tests** — run `npm test` to catch any type errors or broken validations introduced by the spec change.
+5. **Run tests** — run `npm test`. It compiles first (`tsc`, so type errors fail the run) and then executes the compiled tests, which also audit every flag mapping against the spec.
 
 ## Development
 
@@ -775,7 +849,7 @@ npm run update:spec
 # Build
 npm run build
 
-# Run tests
+# Run tests (compiles first, then runs the compiled tests)
 npm test
 ```
 

@@ -1,4 +1,6 @@
 import chalk from 'chalk';
+import { sanitizeForTerminal } from './sanitize';
+import { InvalidArgumentError } from '../client/ApiCore';
 
 export const EXIT_CODES = {
   SUCCESS: 0,
@@ -59,6 +61,23 @@ function httpStatusToCode(status: number | undefined): ExitCodeKey {
   }
 }
 
+let currentOutput: string | undefined;
+
+/** Record the parsed global --output value so error formatting can follow it. */
+export function setErrorOutput(output: string | undefined): void {
+  currentOutput = output;
+}
+
+/**
+ * Human-readable errors when the caller asked for table output, JSON errors
+ * for json/jsonl, and the TTY/piped default when no format was specified.
+ */
+export function outputsHumanErrors(output: string | undefined): boolean {
+  if (output === 'table') return true;
+  if (output === 'json' || output === 'jsonl') return false;
+  return !!process.stdout.isTTY;
+}
+
 function printError(payload: {
   code: ExitCodeKey;
   message: string;
@@ -66,13 +85,13 @@ function printError(payload: {
   body?: unknown;
   details?: unknown;
 }): void {
-  if (process.stdout.isTTY) {
-    process.stderr.write(chalk.red(`Error [${payload.code}]: ${payload.message}\n`));
+  if (outputsHumanErrors(currentOutput)) {
+    process.stderr.write(chalk.red(`Error [${payload.code}]: ${sanitizeForTerminal(payload.message)}\n`));
     if (payload.body) {
       const bodyStr = typeof payload.body === 'string'
         ? payload.body
         : JSON.stringify(payload.body, null, 2);
-      process.stderr.write(chalk.dim(bodyStr) + '\n');
+      process.stderr.write(chalk.dim(sanitizeForTerminal(bodyStr)) + '\n');
     }
   } else {
     process.stdout.write(
@@ -95,6 +114,12 @@ export function handleError(err: unknown): never {
       printError({ code: err.code, message: err.message, details: err.details });
     }
     process.exit(EXIT_CODES[err.code]);
+  }
+
+  // Bad caller input rejected by the client before any request was made.
+  if (err instanceof InvalidArgumentError) {
+    printError({ code: 'VALIDATION', message: err.message });
+    process.exit(EXIT_CODES.VALIDATION);
   }
 
   // Socket-level timeouts (including our own 30s request timeout) have no

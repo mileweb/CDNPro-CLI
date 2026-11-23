@@ -1,5 +1,6 @@
+import { printWriteResult } from '../../output';
 import { Command } from 'commander';
-import * as readline from 'readline';
+import { confirmOrAbort } from '../../util';
 import { resolveCredentials, GlobalOptions } from '../../config';
 import { CDNProClient } from '../../../client/CDNProClient';
 import { handleError } from '../../errors';
@@ -30,16 +31,7 @@ export function registerEdgeHostnameDeleteCommand(parent: Command): void {
   registerOptionsFromMapping(cmd, EDGE_HOSTNAME_DELETE_OPTIONS);
   cmd.action(async (name: string, opts: DeleteOpts, cmdObj: Command) => {
     try {
-      if (!opts.confirm && process.stdout.isTTY) {
-        const answer = await new Promise<string>((resolve) => {
-          const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-          rl.question(`Delete edge hostname "${name}"? [y/N] `, (ans) => { rl.close(); resolve(ans); });
-        });
-        if (answer.toLowerCase() !== 'y') {
-          process.stderr.write('Aborted.\n');
-          process.exit(0);
-        }
-      }
+      await confirmOrAbort(`Delete edge hostname "${name}"?`, opts.confirm);
 
       const globals = cmdObj.optsWithGlobals<GlobalOptions>();
       const serverInfo = await resolveCredentials(globals);
@@ -56,11 +48,7 @@ export function registerEdgeHostnameDeleteCommand(parent: Command): void {
 
       await client.edgeHostnames.delete(name, reqOptions);
 
-      if (!process.stdout.isTTY || globals.output) {
-        process.stdout.write(JSON.stringify({ success: true, edgeHostname: name }) + '\n');
-      } else {
-        process.stderr.write(`Edge hostname ${name} deleted.\n`);
-      }
+      printWriteResult({ edgeHostname: name }, globals.output, `Edge hostname ${name} deleted.\n`);
     } catch (err) {
       handleError(err);
     }

@@ -1,5 +1,6 @@
 import Ajv, { ErrorObject } from 'ajv';
 import { getRequestBodySchema } from './loader';
+import { isRfc3339DateTime } from './date-time';
 
 export interface ValidationResult {
   valid: boolean;
@@ -11,9 +12,18 @@ let _ajv: Ajv | null = null;
 
 function getAjv(): Ajv {
   if (!_ajv) {
-    // coerceTypes lets flag-built bodies (which are always strings) satisfy
-    // numeric/boolean schema types, e.g. --property-version "3" → 3.
-    _ajv = new Ajv({ allErrors: true, strict: false, coerceTypes: true });
+    // No type coercion: Ajv would silently rewrite the caller's body in place
+    // (e.g. {"version":"3"} -> {"version":3}), hiding type errors in --file
+    // bodies and changing what is sent. Commands that build bodies from flags
+    // convert numeric values themselves (see parseIntegerOption).
+    _ajv = new Ajv({ allErrors: true, strict: false });
+    _ajv.addFormat('date-time', { type: 'string', validate: isRfc3339DateTime });
+    // The spec declares these formats; register them so Ajv does not print an
+    // "unknown format ignored" warning each time a schema is compiled. Both are
+    // deliberately lenient: origin host headers may carry a port, and the server
+    // is the authority on address syntax.
+    _ajv.addFormat('email', { type: 'string', validate: (v: string) => /^[^\s@]+@[^\s@]+$/.test(v) });
+    _ajv.addFormat('hostname', { type: 'string', validate: (v: string) => v.length > 0 && !/\s/.test(v) });
   }
   return _ajv;
 }

@@ -11,6 +11,7 @@ import {
   ALL,
   MAX_PAGES,
   registerOptionsFromMapping,
+  buildRequestFromMapping,
   registerMappings,
 } from '../../../option-map';
 
@@ -47,20 +48,14 @@ export function registerAdminCustomerListCommand(parent: Command): void {
     .command('list')
     .description('List customers');
   registerOptionsFromMapping(cmd, ADMIN_CUSTOMER_LIST_OPTIONS);
-  cmd.action(async (opts: ListOpts, cmdObj: Command) => {
+  cmd.action(async (opts: ListOpts & Record<string, unknown>, cmdObj: Command) => {
     try {
       const globals = cmdObj.optsWithGlobals<GlobalOptions>();
       const fmt = globals.output as OutputFormat | undefined;
 
-      const query: Record<string, unknown> = {};
-      if (opts.search) query['search'] = opts.search;
-      if (opts.ids) query['ids'] = opts.ids;
-      if (opts.status) query['status'] = opts.status;
-      if (opts.products) query['products'] = opts.products;
-      if (opts.checkHistoryProduct) query['checkHistoryProduct'] = 'true';
-      if (opts.regionalOffices) query['regionalOffices'] = opts.regionalOffices;
-      if (opts.sortBy) query['sortBy'] = opts.sortBy;
-      if (opts.sortOrder) query['sortOrder'] = opts.sortOrder;
+      // Builds the query and rejects values outside the spec's enums (--status,
+      // --sort-by, --sort-order); limit/offset are re-applied below after paging validation.
+      const { query } = buildRequestFromMapping(opts, ADMIN_CUSTOMER_LIST_OPTIONS, globals);
 
       const reqOptions = {
         ...(globals.verbose ? { verbose: globals.verbose } : {}),

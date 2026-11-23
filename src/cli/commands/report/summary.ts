@@ -5,24 +5,58 @@ import { printResult, OutputFormat } from '../../output';
 import { handleError } from '../../errors';
 import { readBodyFile, validateRequestOrThrow } from '../../util';
 import { getExampleBody } from '../../../schema/synthesize';
+import { getSpec } from '../../../schema/loader';
+import { reportFilterOptions, reportSchemeOption, ReportFilterKind } from './time-series';
 import {
   OptionMapping,
+  REPORT_RANGE,
   FILE_EXAMPLE,
   registerOptionsFromMapping,
+  checkFileConflicts,
   buildRequestFromMapping,
   registerMappings,
   checkRequiredMappings,
 } from '../../option-map';
 
+interface SpecOperation {
+  parameters?: Array<{ in?: string; name?: string }>;
+  requestBody?: {
+    content?: Record<string, {
+      schema?: { properties?: Record<string, { maxItems?: number; items?: { enum?: unknown[] } }> };
+    }>;
+  };
+}
+
+function postOperation(path: string): SpecOperation | undefined {
+  const spec = getSpec() as unknown as { paths: Record<string, Record<string, SpecOperation>> };
+  return spec.paths[path]?.['post'];
+}
+
+/** The `groupBy` body property's accepted values and item limit, from the endpoint's schema. */
+function groupBySpec(path: string): { values: string[]; maxItems?: number } | undefined {
+  const prop = postOperation(path)?.requestBody?.content?.['application/json']?.schema?.properties?.['groupBy'];
+  const values = prop?.items?.enum;
+  if (!prop || !Array.isArray(values)) return undefined;
+  return { values: values.map(String), maxItems: prop.maxItems };
+}
+
+/** True when the operation declares the Report-Range header. */
+function declaresReportRange(path: string): boolean {
+  return (postOperation(path)?.parameters ?? []).some((p) => p.in === 'header' && p.name === 'Report-Range');
+}
+
 /**
  * Register a summary report subcommand.
+ *
+ * `--scheme`, `--group-by` values/limit, and `--report-range` are derived from
+ * the endpoint's own spec entry because they differ between summaries.
  */
 export function registerSummaryReportCommand(
   parent: Command,
   name: string,
   desc: string,
   path: string,
-  { noScheme = false, edgeHostnameFilter = false } = {},
+  { noScheme = false, filters = 'standard' as ReportFilterKind } = {},
 ): void {
   const options: OptionMapping[] = [
     { flag: '--from <date>', target: 'query', param: 'startdate', description: 'Start date (RFC 3339 UTC)', required: true },
@@ -30,27 +64,22 @@ export function registerSummaryReportCommand(
     ...FILE_EXAMPLE,
   ];
 
-  if (!noScheme) {
-    options.push({ flag: '--scheme <scheme>', target: 'query', param: 'scheme', description: 'Traffic type: http | https | all [default: all]' });
+  if (!noScheme) options.push(reportSchemeOption(path));
+  options.push(...reportFilterOptions(filters));
+
+  const groupBy = groupBySpec(path);
+  if (groupBy && filters !== 'edgeHostname') {
+    const limit = groupBy.maxItems !== undefined ? ` (up to ${groupBy.maxItems})` : '';
+    options.push({
+      flag: '--group-by <field>',
+      target: 'body',
+      param: 'groupBy',
+      description: `Group-by field; repeatable${limit}: ${groupBy.values.join(' | ')}`,
+      repeatable: true,
+    });
   }
 
-  if (edgeHostnameFilter) {
-    options.push({ flag: '--edge-hostname <h>', target: 'body', param: 'filters.edgeHostnames', description: 'Filter by edge hostname; repeatable', repeatable: true });
-  } else {
-    options.push(
-      { flag: '--hostname <h>',          target: 'body', param: 'filters.hostnames',          description: 'Filter by client-facing hostname; repeatable',       repeatable: true },
-      { flag: '--property <id>',         target: 'body', param: 'filters.propertyIds',        description: 'Filter by property ID; repeatable',                   repeatable: true },
-      { flag: '--property-hostname <h>', target: 'body', param: 'filters.propertyHostnames',  description: 'Filter by property hostname pattern; repeatable',     repeatable: true },
-      { flag: '--server-group <g>',      target: 'body', param: 'filters.serverGroups',       description: 'Filter by server group; repeatable',                  repeatable: true },
-      {
-        flag: '--group-by <field>',
-        target: 'body',
-        param: 'groupBy',
-        description: 'Group-by field; repeatable (up to 2): hostnames | serverGroups | customerIds | propertyHostnames | legacyTypes',
-        repeatable: true,
-      },
-    );
-  }
+  if (declaresReportRange(path)) options.push(REPORT_RANGE);
 
   const cmd = parent
     .command(name)
@@ -68,11 +97,12 @@ export function registerSummaryReportCommand(
       }
 
       checkRequiredMappings(opts, options);
+      checkFileConflicts(opts, options);
 
       const globals = cmdObj.optsWithGlobals<GlobalOptions>();
 
       let body: unknown;
-      const { query, reqOptions: mappedReqOptions, body: builtBody } = buildRequestFromMapping(opts, options);
+      const { query, reqOptions: mappedReqOptions, body: builtBody } = buildRequestFromMapping(opts, options, globals);
 
       if (opts.file) {
         body = readBodyFile(opts.file as string);

@@ -1,4 +1,4 @@
-import { ApiCore, RequestOptions } from '../ApiCore';
+import { ApiCore, RequestOptions, pathSegment } from '../ApiCore';
 
 export class Prefetches {
   private api: ApiCore;
@@ -17,8 +17,7 @@ export class Prefetches {
   }
 
   get(id: string, reqOptions: RequestOptions = {}) {
-    if (!id) throw new Error('id is required');
-    return this.api.request('GET', `/cdn/prefetches/${encodeURIComponent(id)}`, reqOptions);
+    return this.api.request('GET', `/cdn/prefetches/${pathSegment(id, 'id')}`, reqOptions);
   }
 
   tokens(query: Record<string, unknown> = {}, reqOptions: RequestOptions = {}) {

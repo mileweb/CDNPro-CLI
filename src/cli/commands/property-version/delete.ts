@@ -1,5 +1,6 @@
+import { printWriteResult } from '../../output';
 import { Command } from 'commander';
-import * as readline from 'readline';
+import { confirmOrAbort } from '../../util';
 import { resolveCredentials, GlobalOptions } from '../../config';
 import { CDNProClient } from '../../../client/CDNProClient';
 import { handleError } from '../../errors';
@@ -20,19 +21,7 @@ export function registerPropertyVersionDeleteCommand(parent: Command): void {
   registerOptionsFromMapping(cmd, PROPERTY_VERSION_DELETE_OPTIONS);
   cmd.action(async (propertyId: string, version: string, opts: DeleteOpts, cmdObj: Command) => {
     try {
-      if (!opts.confirm && process.stdout.isTTY) {
-        const answer = await new Promise<string>((resolve) => {
-          const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-          rl.question(`Delete property "${propertyId}" version ${version}? [y/N] `, (ans) => {
-            rl.close();
-            resolve(ans);
-          });
-        });
-        if (answer.toLowerCase() !== 'y') {
-          process.stderr.write('Aborted.\n');
-          process.exit(0);
-        }
-      }
+      await confirmOrAbort(`Delete property "${propertyId}" version ${version}?`, opts.confirm);
 
       const globals = cmdObj.optsWithGlobals<GlobalOptions>();
       const serverInfo = await resolveCredentials(globals);
@@ -45,11 +34,7 @@ export function registerPropertyVersionDeleteCommand(parent: Command): void {
 
       await client.properties.deleteVersion(propertyId, version, reqOptions);
 
-      if (!process.stdout.isTTY || globals.output) {
-        process.stdout.write(JSON.stringify({ success: true, propertyId, version }) + '\n');
-      } else {
-        process.stderr.write(`Property ${propertyId} version ${version} deleted.\n`);
-      }
+      printWriteResult({ propertyId, version }, globals.output, `Property ${propertyId} version ${version} deleted.\n`);
     } catch (err) {
       handleError(err);
     }

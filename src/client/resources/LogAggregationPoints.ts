@@ -1,4 +1,4 @@
-import { ApiCore, RequestOptions } from '../ApiCore';
+import { ApiCore, RequestOptions, pathSegment } from '../ApiCore';
 
 export class LogAggregationPoints {
   private api: ApiCore;
@@ -12,8 +12,7 @@ export class LogAggregationPoints {
   }
 
   get(id: string | number, reqOptions: RequestOptions = {}) {
-    if (id === undefined || id === null || id === '') throw new Error('id is required');
-    return this.api.request('GET', `/cdn/logAggregationPoints/${encodeURIComponent(String(id))}`, reqOptions);
+    return this.api.request('GET', `/cdn/logAggregationPoints/${pathSegment(id, 'id')}`, reqOptions);
   }
 
   create(body: unknown, reqOptions: RequestOptions = {}) {
@@ -22,17 +21,15 @@ export class LogAggregationPoints {
   }
 
   update(id: string | number, patchBody: unknown, reqOptions: RequestOptions = {}) {
-    if (id === undefined || id === null || id === '') throw new Error('id is required');
     if (!patchBody) throw new Error('patchBody is required');
-    return this.api.request('PATCH', `/cdn/logAggregationPoints/${encodeURIComponent(String(id))}`, { ...reqOptions, body: patchBody });
+    return this.api.request('PATCH', `/cdn/logAggregationPoints/${pathSegment(id, 'id')}`, { ...reqOptions, body: patchBody });
   }
 
   delete(id: string | number, reqOptions: RequestOptions = {}) {
-    if (id === undefined || id === null || id === '') throw new Error('id is required');
-    return this.api.request('DELETE', `/cdn/logAggregationPoints/${encodeURIComponent(String(id))}`, reqOptions);
+    return this.api.request('DELETE', `/cdn/logAggregationPoints/${pathSegment(id, 'id')}`, reqOptions);
   }
 
-  summary(reqOptions: RequestOptions = {}) {
-    return this.api.request('GET', '/cdn/logAggregationPoints/summaryReport', reqOptions);
+  summary(query: Record<string, unknown>, reqOptions: RequestOptions = {}) {
+    return this.api.request('GET', '/cdn/logAggregationPoints/summaryReport', { ...reqOptions, query: query as RequestOptions['query'] });
   }
 }

@@ -17,8 +17,8 @@ import {
 } from '../../option-map';
 
 export const PREFETCH_LIST_OPTIONS: OptionMapping[] = [
-  { flag: '--from <date>',   target: 'query', param: 'startDate', description: 'Start date (RFC 3339 UTC)' },
-  { flag: '--to <date>',     target: 'query', param: 'endDate',   description: 'End date (RFC 3339 UTC)' },
+  { flag: '--from <date>',   target: 'query', param: 'startdate', description: 'Start date (RFC 3339 UTC)' },
+  { flag: '--to <date>',     target: 'query', param: 'enddate',   description: 'End date (RFC 3339 UTC)' },
   { flag: '--search <term>', target: 'query', param: 'search',    description: 'Keyword search' },
   ...SORT_OPTIONS,
   ...PAGINATION_OPTIONS,
@@ -40,7 +40,7 @@ export function registerPrefetchListCommand(parent: Command): void {
       const globals = cmdObj.optsWithGlobals<GlobalOptions>();
       const fmt = globals.output as OutputFormat | undefined;
 
-      const { query, reqOptions } = buildRequestFromMapping(opts, PREFETCH_LIST_OPTIONS);
+      const { query, reqOptions } = buildRequestFromMapping(opts, PREFETCH_LIST_OPTIONS, globals);
 
       const paging = resolveListPaging(opts, {
         resource: 'prefetch',

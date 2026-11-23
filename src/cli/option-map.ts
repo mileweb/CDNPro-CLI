@@ -1,5 +1,8 @@
 import { Command } from 'commander';
-import { CliError } from './errors';
+import { CliError, outputsHumanErrors } from './errors';
+import { lookupOperation } from '../schema/query';
+import { getParameterEnum, getParameterFormat } from '../schema/loader';
+import { isRfc3339DateTime } from '../schema/date-time';
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -49,7 +52,7 @@ export const IF_UNMODIFIED_SINCE: OptionMapping = {
   flag: '--if-unmodified-since <date>',
   target: 'header',
   param: 'If-Unmodified-Since',
-  description: 'Fail if resource has been modified since this RFC 1123 date',
+  description: 'Fail if resource has been modified since this date (HTTP-date or RFC 3339)',
 };
 
 export const CONFIRM: OptionMapping = {
@@ -129,10 +132,18 @@ export function registerOptionsFromMapping(cmd: Command, mappings: OptionMapping
   }
 }
 
+/** Global options that apply to the request rather than the mapped command flags. */
+export interface RequestGlobals {
+  onBehalfOf?: string;
+  verbose?: number;
+  output?: string;
+}
+
 /** Build { query, reqOptions, body } from parsed Commander opts. */
 export function buildRequestFromMapping(
   opts: Record<string, unknown>,
   mappings: OptionMapping[],
+  globals?: RequestGlobals,
 ): {
   query: Record<string, unknown>;
   reqOptions: Record<string, unknown>;
@@ -141,6 +152,9 @@ export function buildRequestFromMapping(
   const query: Record<string, unknown> = {};
   const reqOptions: Record<string, unknown> = {};
   let bodyObj: Record<string, unknown> | null = null;
+
+  if (globals?.onBehalfOf != null) reqOptions.onBehalfOf = globals.onBehalfOf;
+  if (globals?.verbose) reqOptions.verbose = globals.verbose;
 
   for (const m of mappings) {
     if (m.target === 'cli-only' || m.param === null) continue;
@@ -168,7 +182,160 @@ export function buildRequestFromMapping(
     }
   }
 
+  const target = mappingOperations.get(mappings);
+  if (target) {
+    const violations = findOptionViolations(
+      target.resource,
+      target.operation,
+      mappings,
+      query,
+      reqOptions,
+    );
+    if (violations.length > 0) {
+      emitOptionViolations(violations, target.resource, target.operation, globals?.output);
+    }
+  }
+
   return { query, reqOptions, body: bodyObj };
+}
+
+// ── Schema-driven value validation ────────────────────────────────
+// registerMappings associates each option array with its API operation, so
+// buildRequestFromMapping can reject invalid enumerated or date-time values
+// without every command passing the operation explicitly.
+const mappingOperations = new WeakMap<
+  OptionMapping[],
+  { resource: string; operation: string }
+>();
+
+interface OptionViolation {
+  cliFlag: string;
+  location: 'query' | 'header';
+  param: string;
+  value: string;
+  keyword: 'enum' | 'format';
+  message: string;
+  allowedValues?: string[];
+}
+
+function findOptionViolations(
+  resource: string,
+  operation: string,
+  mappings: OptionMapping[],
+  query: Record<string, unknown>,
+  reqOptions: Record<string, unknown>,
+): OptionViolation[] {
+  const entry = lookupOperation(resource, operation);
+  if (!entry) return [];
+
+  const violations: OptionViolation[] = [];
+  for (const m of mappings) {
+    if (m.target !== 'query' && m.target !== 'header') continue;
+    if (!m.param) continue;
+
+    const raw = m.target === 'query'
+      ? query[m.param]
+      : reqOptions[flagToAttr(m.flag)];
+    if (raw === undefined || raw === null || raw === '') continue;
+
+    const constraint = getParameterEnum(entry.path, entry.method, m.target, m.param);
+    const format = getParameterFormat(entry.path, entry.method, m.target, m.param);
+    if (!constraint && format !== 'date-time') continue;
+
+    // Query arrays are encoded comma-separated; repeatable flags arrive as arrays.
+    const values = constraint?.type === 'array'
+      ? (Array.isArray(raw) ? raw.map(String) : String(raw).split(','))
+      : [String(raw)];
+
+    for (const value of values) {
+      if (constraint && !constraint.values.includes(value)) {
+        violations.push({
+          cliFlag: flagToCliFlag(m.flag),
+          location: m.target,
+          param: m.param,
+          value,
+          keyword: 'enum',
+          message: `must be one of: ${constraint.values.join(', ')}`,
+          allowedValues: constraint.values,
+        });
+      } else if (format === 'date-time' && !isRfc3339DateTime(value)) {
+        violations.push({
+          cliFlag: flagToCliFlag(m.flag),
+          location: m.target,
+          param: m.param,
+          value,
+          keyword: 'format',
+          message: 'must be an RFC 3339 date-time with a timezone (e.g. 2026-01-31T00:00:00Z)',
+        });
+      }
+    }
+  }
+  return violations;
+}
+
+function emitOptionViolations(
+  violations: OptionViolation[],
+  resource: string,
+  operation: string,
+  output?: string,
+): never {
+  const isHuman = outputsHumanErrors(output);
+  const message = violations.length === 1
+    ? `Invalid value for ${violations[0].cliFlag}`
+    : `Invalid values for ${violations.length} options`;
+  const hint = `Run \`cdnpro schema ${resource} ${operation}\` to see accepted values`;
+
+  if (isHuman) {
+    process.stderr.write(`Error: ${message}\n`);
+    for (const v of violations) {
+      process.stderr.write(`  - ${v.cliFlag} "${v.value}": ${v.message}\n`);
+    }
+    process.stderr.write(`\nTip: ${hint}\n`);
+  } else {
+    const envelope = {
+      error: {
+        code: 'VALIDATION',
+        message,
+        validationErrors: violations.map(v => ({
+          path: `${v.location}.${v.param}`,
+          message: v.message,
+          keyword: v.keyword,
+          params: v.allowedValues ? { allowedValues: v.allowedValues } : { format: 'date-time' },
+          cliFlag: v.cliFlag,
+        })),
+        hint,
+      },
+    };
+    process.stdout.write(JSON.stringify(envelope, null, 2) + '\n');
+  }
+
+  throw new CliError('VALIDATION', message, undefined, true);
+}
+
+/**
+ * `--file` supplies the entire request body, so any flag that would also build
+ * body content is a conflict. Silently preferring the file would drop the
+ * caller's flags without a trace (e.g. `purge create --file p.json --url ...`
+ * purging only what the file lists). Query/header flags are unaffected.
+ */
+export function checkFileConflicts(opts: object, mappings: OptionMapping[]): void {
+  const values = opts as Record<string, unknown>;
+  if (!values['file']) return;
+  const conflicting = mappings
+    .filter((m) => m.target === 'body' && m.param !== null)
+    .filter((m) => {
+      const val = values[flagToAttr(m.flag)];
+      if (val === undefined || val === null || val === '' || val === false) return false;
+      return !(Array.isArray(val) && val.length === 0);
+    })
+    .map((m) => flagToCliFlag(m.flag));
+  if (conflicting.length > 0) {
+    throw new CliError(
+      'VALIDATION',
+      `--file supplies the whole request body and cannot be combined with ${conflicting.join(', ')}`,
+      { cliFlag: '--file', conflictsWith: conflicting },
+    );
+  }
 }
 
 /** Validate required options from mappings. */
@@ -212,6 +379,7 @@ export function registerMappings(
   mappings: OptionMapping[],
 ): void {
   mappingRegistry.set(`${resource}.${operation}`, mappings);
+  mappingOperations.set(mappings, { resource, operation });
 }
 
 /** Look up option mappings for a CLI operation. */
@@ -220,4 +388,20 @@ export function getMappings(
   operation: string,
 ): OptionMapping[] | undefined {
   return mappingRegistry.get(`${resource}.${operation}`);
+}
+
+/** All registered operation mappings, for schema-audit tests. */
+export function getAllMappings(): Array<{
+  resource: string;
+  operation: string;
+  mappings: OptionMapping[];
+}> {
+  return [...mappingRegistry.entries()].map(([key, mappings]) => {
+    const dot = key.indexOf('.');
+    return {
+      resource: key.slice(0, dot),
+      operation: key.slice(dot + 1),
+      mappings,
+    };
+  });
 }

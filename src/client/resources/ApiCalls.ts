@@ -1,4 +1,4 @@
-import { ApiCore, RequestOptions } from '../ApiCore';
+import { ApiCore, RequestOptions, pathSegment } from '../ApiCore';
 
 export class ApiCalls {
   private api: ApiCore;
@@ -16,7 +16,6 @@ export class ApiCalls {
   }
 
   get(id: string, reqOptions: RequestOptions = {}) {
-    if (!id) throw new Error('id is required');
-    return this.api.request('GET', `/ngadmin/apicalls/${encodeURIComponent(id)}`, reqOptions);
+    return this.api.request('GET', `/ngadmin/apicalls/${pathSegment(id, 'id')}`, reqOptions);
   }
 }

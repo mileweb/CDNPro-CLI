@@ -5,12 +5,13 @@ import { printCreateSuccess, OutputFormat } from '../../output';
 import { handleError } from '../../errors';
 import { CliError } from '../../errors';
 import { readBodyFile, enrichWithLocationId, checkRequiredOption, validateRequestOrThrow } from '../../util';
-import { waitForTask } from '../../wait';
+import { waitForTask, parseWaitOptions } from '../../wait';
 import { getNamedSpecExample } from '../../../schema/loader';
 import {
   OptionMapping,
   FILE_EXAMPLE,
   registerOptionsFromMapping,
+  checkFileConflicts,
   registerMappings,
 } from '../../option-map';
 
@@ -92,6 +93,7 @@ export function registerDeployCreateCommand(parent: Command): void {
       let body: unknown;
 
       if (opts.file) {
+        checkFileConflicts(opts, DEPLOY_CREATE_OPTIONS);
         body = readBodyFile(opts.file);
       } else {
         checkRequiredOption(opts.target, '--target <env>');
@@ -144,6 +146,10 @@ export function registerDeployCreateCommand(parent: Command): void {
         DEPLOY_CREATE_OPTIONS,
       );
 
+      // Validate --timeout/--poll-interval before the request: a bad value must not
+      // surface after the task has already been created.
+      const waitOpts = opts.wait ? parseWaitOptions(opts, { timeout: 600, pollInterval: 30 }) : undefined;
+
       const serverInfo = await resolveCredentials(globals);
       const client = new CDNProClient(serverInfo);
 
@@ -167,21 +173,19 @@ export function registerDeployCreateCommand(parent: Command): void {
         const taskId = data['id'] as string | undefined;
         if (!taskId) throw new CliError('ERROR', 'Server did not return a task ID; cannot poll');
 
-        const timeout = parseInt(opts.timeout ?? '600', 10);
-        if (isNaN(timeout) || timeout < 1) {
-          throw new CliError('VALIDATION', `--timeout must be a positive integer, got: ${opts.timeout}`);
-        }
-        const pollInterval = parseInt(opts.pollInterval ?? '30', 10);
-        if (isNaN(pollInterval) || pollInterval < 1) {
-          throw new CliError('VALIDATION', `--poll-interval must be a positive integer, got: ${opts.pollInterval}`);
-        }
+        // Polling must carry the same On-Behalf-Of as the create call, or a reseller
+        // would poll their own account and fail after a successful create.
+        const pollReqOptions = {
+          ...(globals.onBehalfOf ? { onBehalfOf: globals.onBehalfOf } : {}),
+          verbose: globals.verbose ?? 0,
+        };
 
         printCreateSuccess('Deployment', 'deploymentId', String(taskId), fmt);
 
         await waitForTask(
-          (id) => client.deploymentTasks.get(id, { verbose: globals.verbose ?? 0 }) as Promise<unknown>,
+          (id) => client.deploymentTasks.get(id, pollReqOptions) as Promise<unknown>,
           String(taskId),
-          { taskType: 'deployment', timeout, pollInterval, outputFormat: fmt },
+          { taskType: 'deployment', ...waitOpts!, outputFormat: fmt },
         );
         return;
       }

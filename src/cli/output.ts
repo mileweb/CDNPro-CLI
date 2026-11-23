@@ -1,5 +1,6 @@
 import chalk from 'chalk';
 import Table from 'cli-table3';
+import { sanitizeForTerminal } from './sanitize';
 
 export type OutputFormat = 'table' | 'json' | 'jsonl';
 
@@ -83,9 +84,36 @@ export function printResult(
 }
 
 /**
+ * Build the JSON payload for a write success:
+ * `{"data":{"success":true,...fields}}`.
+ */
+export function writeResultData(fields: Record<string, unknown> = {}): string {
+  return JSON.stringify({ data: { success: true, ...fields } });
+}
+
+/**
+ * Emit a write success in the standard envelope.
+ * In TTY mode (no explicit format): `humanMessage` to stderr.
+ * In pipe / explicit format mode: `{"data":{"success":true,...}}` to stdout.
+ */
+export function printWriteResult(
+  fields: Record<string, unknown>,
+  format?: string,
+  humanMessage?: string,
+): void {
+  if (!process.stdout.isTTY || format) {
+    process.stdout.write(writeResultData(fields) + '\n');
+  } else if (humanMessage) {
+    // humanMessage often embeds IDs taken from the server's Location header.
+    const text = sanitizeForTerminal(humanMessage);
+    process.stderr.write(text.endsWith('\n') ? text : text + '\n');
+  }
+}
+
+/**
  * Print a success message for resource creation.
  * In TTY mode (no explicit format): "Created new <label>: \"<id>\"." to stderr.
- * In pipe / explicit format mode: {"success":true,"<jsonKey>":"<id>"} to stdout.
+ * In pipe / explicit format mode: {"data":{"success":true,"<jsonKey>":"<id>"}}.
  */
 export function printCreateSuccess(
   label: string,
@@ -93,13 +121,7 @@ export function printCreateSuccess(
   id: string,
   format?: string,
 ): void {
-  if (!process.stdout.isTTY || format) {
-    const result: Record<string, unknown> = { success: true };
-    result[jsonKey] = id;
-    process.stdout.write(JSON.stringify(result) + '\n');
-  } else {
-    process.stderr.write(`Created new ${label}: "${id}".\n`);
-  }
+  printWriteResult({ [jsonKey]: id }, format, `Created new ${label}: "${id}".`);
 }
 
 export function printTable(data: unknown, columns?: string[]): void {
@@ -121,13 +143,24 @@ export function printTable(data: unknown, columns?: string[]): void {
       process.stdout.write(table.toString() + '\n');
       return;
     }
-    const allKeys = Object.keys(data[0] as Record<string, unknown>);
-    const cols = columns ?? allKeys.filter(k => {
-      const v = (data[0] as Record<string, unknown>)[k];
-      return !(v !== null && typeof v === 'object' && !Array.isArray(v));
-    });
+    // Rows can have different keys (optional properties), so take the union in
+    // first-seen order rather than only the first row's keys. A key is skipped only
+    // when every row that has it holds a nested object, which does not fit a table
+    // cell. A column that is null everywhere is still shown (as "-").
+    const rows = data.filter((r) => r !== null && typeof r === 'object') as Array<Record<string, unknown>>;
+    const isNested = (v: unknown) => v !== null && typeof v === 'object' && !Array.isArray(v);
+    const allKeys: string[] = [];
+    const seen = new Set<string>();
+    for (const r of rows) {
+      for (const k of Object.keys(r)) {
+        if (!seen.has(k)) { seen.add(k); allKeys.push(k); }
+      }
+    }
+    const cols = columns ?? allKeys.filter((k) =>
+      rows.some((r) => k in r && !isNested(r[k])),
+    );
     const table = new Table({
-      head: cols.map((c) => chalk.bold(c)),
+      head: cols.map((c) => chalk.bold(sanitizeForTerminal(c))),
       style: { head: [], border: [] },
     });
     for (const row of data) {
@@ -142,20 +175,21 @@ export function printTable(data: unknown, columns?: string[]): void {
     const obj = data as Record<string, unknown>;
     const table = new Table({ style: { head: [], border: [] } });
     for (const [k, v] of Object.entries(obj)) {
-      table.push({ [chalk.bold(k)]: formatCell(v) });
+      table.push({ [chalk.bold(sanitizeForTerminal(k))]: formatCell(v) });
     }
     process.stdout.write(table.toString() + '\n');
     return;
   }
 
   // Scalar or null — just print it
-  process.stdout.write(String(data) + '\n');
+  process.stdout.write(sanitizeForTerminal(String(data)) + '\n');
 }
 
 function formatCell(value: unknown): string {
   if (value === null || value === undefined) return chalk.dim('-');
+  // JSON.stringify already escapes control characters.
   if (typeof value === 'object') return JSON.stringify(value);
-  return String(value);
+  return sanitizeForTerminal(String(value));
 }
 
 interface RawResponseLike {
@@ -193,10 +227,16 @@ export function unwrapRawResponse(
  * For single-object responses, sets `single` and leaves `items` empty — the
  * caller should render `single` directly (e.g. via `printTable`) rather than
  * treating it as a one-element list.
+ *
+ * When the response contains more than one top-level array, `itemsKey` must
+ * name the array that holds the list items; otherwise this throws rather than
+ * silently picking one. (The IP-range reference lists merge their arrays in
+ * {@link buildIpRangeList} instead.)
  */
 export function buildMeta(
   rawData: unknown,
   headers?: Record<string, string | string[] | undefined>,
+  itemsKey?: string,
 ): { items: unknown[]; meta: Record<string, unknown>; single?: unknown } {
   // CDN Pro list responses are plain arrays; total may come from a header.
   let items: unknown[] = [];
@@ -208,8 +248,23 @@ export function buildMeta(
     const obj = rawData as Record<string, unknown>;
     // CDN Pro list responses wrap results in a resource-specific array key,
     // e.g. { properties: [...], count: N } or { certificates: [...] }.
-    // Find the first value that is an array.
-    const arrayKey = Object.keys(obj).find(k => Array.isArray(obj[k]));
+    let arrayKey: string | undefined;
+    if (itemsKey !== undefined) {
+      if (!Array.isArray(obj[itemsKey])) {
+        throw new Error(`Response does not contain an array named "${itemsKey}"`);
+      }
+      arrayKey = itemsKey;
+    } else {
+      const arrayKeys = Object.keys(obj).filter(k => Array.isArray(obj[k]));
+      if (arrayKeys.length > 1) {
+        throw new Error(
+          `Response contains multiple top-level arrays (${arrayKeys.join(', ')}); ` +
+          `cannot determine which one holds the list items`,
+        );
+      }
+      arrayKey = arrayKeys[0];
+    }
+
     if (arrayKey !== undefined) {
       items = obj[arrayKey] as unknown[];
       // Most list endpoints include a count field; apicalls uses hasMore instead.
@@ -230,4 +285,34 @@ export function buildMeta(
   }
 
   return { items, meta };
+}
+
+export interface IpRangeItem {
+  ip: string;
+  version: 4 | 6;
+}
+
+/**
+ * Merge the `ipV4` and `ipV6` arrays returned by `/cdn/publicIpList` and
+ * `/cdn/originFastRouteIpList` into a single item list, preserving the
+ * response's `lastUpdated` and `effectiveDate` in `meta`.
+ */
+export function buildIpRangeList(
+  rawData: unknown,
+): { items: IpRangeItem[]; meta: Record<string, unknown> } {
+  const obj = (rawData ?? {}) as Record<string, unknown>;
+  const ipV4 = Array.isArray(obj.ipV4) ? obj.ipV4.map(String) : [];
+  const ipV6 = Array.isArray(obj.ipV6) ? obj.ipV6.map(String) : [];
+
+  const meta: Record<string, unknown> = {};
+  if (obj.lastUpdated !== undefined) meta.lastUpdated = obj.lastUpdated;
+  if (obj.effectiveDate !== undefined) meta.effectiveDate = obj.effectiveDate;
+
+  return {
+    items: [
+      ...ipV4.map(ip => ({ ip, version: 4 as const })),
+      ...ipV6.map(ip => ({ ip, version: 6 as const })),
+    ],
+    meta,
+  };
 }

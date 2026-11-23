@@ -6,7 +6,7 @@ import { handleError } from '../../../errors';
 import { registerMappings } from '../../../option-map';
 
 export function registerAdminApiAccountGetCommand(parent: Command): void {
-  registerMappings('api-account', 'get', []);
+  registerMappings('admin-api-account', 'get', []);
 
   parent
     .command('get <id>')
@@ -19,6 +19,7 @@ export function registerAdminApiAccountGetCommand(parent: Command): void {
         const fmt = globals.output as OutputFormat | undefined;
 
         const reqOptions = {
+          ...(globals.onBehalfOf ? { onBehalfOf: globals.onBehalfOf } : {}),
           ...(globals.verbose ? { verbose: globals.verbose } : {}),
         };
 

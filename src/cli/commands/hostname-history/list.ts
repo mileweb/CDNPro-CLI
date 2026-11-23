@@ -7,7 +7,6 @@ import { resolveListPaging, paginateOffset } from '../../paginate';
 import {
   OptionMapping,
   PAGINATION_OPTIONS,
-  REPORT_RANGE,
   ALL,
   MAX_PAGES,
   registerOptionsFromMapping,
@@ -16,12 +15,11 @@ import {
 } from '../../option-map';
 
 export const HOSTNAME_HISTORY_LIST_OPTIONS: OptionMapping[] = [
-  { flag: '--from <date>',    target: 'query', param: 'from',   description: 'Start date (RFC 3339 UTC)' },
-  { flag: '--to <date>',      target: 'query', param: 'to',     description: 'End date (RFC 3339 UTC)' },
+  { flag: '--from <date>',    target: 'query', param: 'startdate',   description: 'Start date (RFC 3339 UTC)' },
+  { flag: '--to <date>',      target: 'query', param: 'enddate',     description: 'End date (RFC 3339 UTC)' },
   { flag: '--search <term>',  target: 'query', param: 'search', description: 'Filter by hostname prefix' },
   { flag: '--target <target>', target: 'query', param: 'target', description: 'Filter by deployment target: staging | production | all' },
   ...PAGINATION_OPTIONS,
-  REPORT_RANGE,
   ALL,
   MAX_PAGES,
 ];
@@ -39,7 +37,7 @@ export function registerHostnameHistoryListCommand(parent: Command): void {
       const globals = cmdObj.optsWithGlobals<GlobalOptions>();
       const fmt = globals.output as OutputFormat | undefined;
 
-      const { query, reqOptions } = buildRequestFromMapping(opts, HOSTNAME_HISTORY_LIST_OPTIONS);
+      const { query, reqOptions } = buildRequestFromMapping(opts, HOSTNAME_HISTORY_LIST_OPTIONS, globals);
 
       const paging = resolveListPaging(opts, {
         resource: 'hostname-history',

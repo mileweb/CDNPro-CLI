@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import { Command } from 'commander';
 import { resolveCredentials, GlobalOptions } from '../../config';
 import { CDNProClient } from '../../../client/CDNProClient';
-import { printResult, OutputFormat } from '../../output';
+import { printResult, printWriteResult, OutputFormat } from '../../output';
 import { handleError } from '../../errors';
 import { CliError } from '../../errors';
 import {
@@ -32,7 +32,7 @@ export function registerCertDownloadCsrCommand(parent: Command): void {
       const client = new CDNProClient(serverInfo);
       const fmt = globals.output as OutputFormat | undefined;
 
-      const { query } = buildRequestFromMapping(opts, CERT_DOWNLOAD_CSR_OPTIONS);
+      const { query } = buildRequestFromMapping(opts, CERT_DOWNLOAD_CSR_OPTIONS, globals);
 
       const reqOptions = {
         ...(globals.onBehalfOf ? { onBehalfOf: globals.onBehalfOf } : {}),
@@ -48,7 +48,7 @@ export function registerCertDownloadCsrCommand(parent: Command): void {
         } catch (e) {
           throw new CliError('ERROR', `Cannot write to "${opts.out}": ${(e as Error).message}`);
         }
-        if (process.stdout.isTTY) process.stderr.write(`CSR written to ${opts.out}\n`);
+        printWriteResult({ file: opts.out }, globals.output, `CSR written to ${opts.out}`);
         return;
       }
 

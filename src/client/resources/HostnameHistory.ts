@@ -1,4 +1,4 @@
-import { ApiCore, RequestOptions } from '../ApiCore';
+import { ApiCore, RequestOptions, pathSegment } from '../ApiCore';
 
 export class HostnameHistory {
   private api: ApiCore;
@@ -12,7 +12,6 @@ export class HostnameHistory {
   }
 
   get(hostname: string, query: Record<string, unknown> = {}, reqOptions: RequestOptions = {}) {
-    if (!hostname) throw new Error('hostname is required');
-    return this.api.request('GET', `/cdn/hostnames/historical/${encodeURIComponent(hostname)}`, { ...reqOptions, query: query as RequestOptions['query'] });
+    return this.api.request('GET', `/cdn/hostnames/historical/${pathSegment(hostname, 'hostname')}`, { ...reqOptions, query: query as RequestOptions['query'] });
   }
 }

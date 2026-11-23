@@ -35,9 +35,9 @@ export function registerClientRegionCommands(parent: Command): void {
       const client = new CDNProClient(serverInfo);
       const fmt = globals.output as OutputFormat | undefined;
 
-      const { query } = buildRequestFromMapping(opts, CLIENT_REGION_LIST_OPTIONS);
+      const { query } = buildRequestFromMapping(opts, CLIENT_REGION_LIST_OPTIONS, globals);
 
-      const data = await client.geo.clientRegions(query);
+      const data = await client.geo.clientRegions(query, globals.verbose ? { verbose: globals.verbose } : {});
       const { items, meta } = buildMeta(data);
 
       const effectiveFmt = fmt ?? (process.stdout.isTTY ? 'table' : 'json');

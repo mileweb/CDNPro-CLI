@@ -32,7 +32,7 @@ export function registerAdminApiCallCountsCommand(parent: Command): void {
       const client = new CDNProClient(serverInfo);
       const fmt = globals.output as OutputFormat | undefined;
 
-      const { query, reqOptions: mappedReqOptions } = buildRequestFromMapping(opts, APICALL_COUNTS_OPTIONS);
+      const { query, reqOptions: mappedReqOptions } = buildRequestFromMapping(opts, APICALL_COUNTS_OPTIONS, globals);
 
       const reqOptions = {
         ...(globals.onBehalfOf ? { onBehalfOf: globals.onBehalfOf } : {}),

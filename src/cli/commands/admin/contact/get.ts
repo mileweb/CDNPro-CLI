@@ -6,7 +6,7 @@ import { handleError } from '../../../errors';
 import { registerMappings } from '../../../option-map';
 
 export function registerAdminContactGetCommand(parent: Command): void {
-  registerMappings('contact', 'get', []);
+  registerMappings('admin-contact', 'get', []);
 
   parent
     .command('get <id>')
@@ -19,6 +19,7 @@ export function registerAdminContactGetCommand(parent: Command): void {
         const fmt = globals.output as OutputFormat | undefined;
 
         const reqOptions = {
+          ...(globals.onBehalfOf ? { onBehalfOf: globals.onBehalfOf } : {}),
           ...(globals.verbose ? { verbose: globals.verbose } : {}),
         };
 

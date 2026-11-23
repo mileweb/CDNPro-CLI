@@ -18,7 +18,7 @@ import {
 
 export const PROPERTY_LIST_OPTIONS: OptionMapping[] = [
   { flag: '--search <term>',      target: 'query', param: 'search',    description: 'Keyword search' },
-  { flag: '--target <target>',    target: 'query', param: 'target',    description: 'Filter by deployment target: staging | production' },
+  { flag: '--target <target>',    target: 'query', param: 'target',    description: 'Filter by deployment target: all | staging | production' },
   { flag: '--has-config <value>', target: 'query', param: 'hasConfig', description: 'Filter by configuration status' },
   ...SORT_OPTIONS,
   ...PAGINATION_OPTIONS,
@@ -40,7 +40,7 @@ export function registerPropertyListCommand(parent: Command): void {
       const globals = cmdObj.optsWithGlobals<GlobalOptions>();
       const fmt = globals.output as OutputFormat | undefined;
 
-      const { query, reqOptions } = buildRequestFromMapping(opts, PROPERTY_LIST_OPTIONS);
+      const { query, reqOptions } = buildRequestFromMapping(opts, PROPERTY_LIST_OPTIONS, globals);
 
       const paging = resolveListPaging(opts, {
         resource: 'property',

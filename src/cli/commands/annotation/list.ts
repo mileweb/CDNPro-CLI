@@ -11,14 +11,15 @@ import {
   MAX_PAGES,
   registerOptionsFromMapping,
   buildRequestFromMapping,
+  checkRequiredMappings,
   registerMappings,
 } from '../../option-map';
 
 export const ANNOTATION_LIST_OPTIONS: OptionMapping[] = [
   // This endpoint takes its filters and pagination as query parameters
   // (POST /cdn/annotationsList with an optional filters body).
-  { flag: '--from <date>',   target: 'query', param: 'startdate', description: 'Start date (RFC 3339 UTC)' },
-  { flag: '--to <date>',     target: 'query', param: 'enddate',   description: 'End date (RFC 3339 UTC)' },
+  { flag: '--from <date>',   target: 'query', param: 'startdate', description: 'Start date (RFC 3339 UTC)', required: true },
+  { flag: '--to <date>',     target: 'query', param: 'enddate',   description: 'End date (RFC 3339 UTC)', required: true },
   { flag: '--type <type>',   target: 'query', param: 'type',      description: 'Filter by type: client | configuration | operation' },
   { flag: '--search <term>', target: 'query', param: 'search',    description: 'Filter by ID or comment text' },
   { flag: '--limit <n>',     target: 'query', param: 'limit',     description: 'Page size' },
@@ -38,10 +39,12 @@ export function registerAnnotationListCommand(parent: Command): void {
 
   cmd.action(async (opts: Record<string, unknown>, cmdObj: Command) => {
     try {
+      checkRequiredMappings(opts, ANNOTATION_LIST_OPTIONS);
+
       const globals = cmdObj.optsWithGlobals<GlobalOptions>();
       const fmt = globals.output as OutputFormat | undefined;
 
-      const { query, reqOptions } = buildRequestFromMapping(opts, ANNOTATION_LIST_OPTIONS);
+      const { query, reqOptions } = buildRequestFromMapping(opts, ANNOTATION_LIST_OPTIONS, globals);
 
       const paging = resolveListPaging(opts, {
         resource: 'annotation',

@@ -16,3 +16,25 @@ test('parseIntegerOption rejects non-integers', () => {
     /--property-version must be an integer/,
   );
 });
+
+import { enrichWithLocationId } from '../cli/util';
+
+function rawResponse(obj: unknown, location?: string | string[]) {
+  return { obj, ctx: { _res: { headers: location === undefined ? {} : { location } } } };
+}
+
+test('enrichWithLocationId prefers the body id', () => {
+  assert.deepEqual(enrichWithLocationId(rawResponse({ id: 'abc' }, '/cdn/x/zzz')), { id: 'abc' });
+});
+
+test('enrichWithLocationId takes the id from the Location header', () => {
+  assert.equal(enrichWithLocationId(rawResponse(null, 'https://h/cdn/properties/p1'))['id'], 'p1');
+  assert.equal(enrichWithLocationId(rawResponse({}, 'https://h/cdn/properties/p1/'))['id'], 'p1');
+  assert.equal(enrichWithLocationId(rawResponse('', 'https://h/cdn/properties/p1?x=1'))['id'], 'p1');
+  assert.equal(enrichWithLocationId(rawResponse({}, ['https://h/cdn/properties/p2']))['id'], 'p2');
+});
+
+test('enrichWithLocationId fails loudly when no id is available', () => {
+  assert.throws(() => enrichWithLocationId(rawResponse({})), /no resource ID/);
+  assert.throws(() => enrichWithLocationId(rawResponse({ id: '' }, '')), /no resource ID/);
+});

@@ -1,5 +1,6 @@
+import { printWriteResult } from '../../output';
 import { Command } from 'commander';
-import * as readline from 'readline';
+import { confirmOrAbort } from '../../util';
 import { resolveCredentials, GlobalOptions } from '../../config';
 import { CDNProClient } from '../../../client/CDNProClient';
 import { handleError } from '../../errors';
@@ -20,16 +21,7 @@ export function registerPropertyDeleteCommand(parent: Command): void {
   registerOptionsFromMapping(cmd, PROPERTY_DELETE_OPTIONS);
   cmd.action(async (id: string, opts: DeleteOpts, cmdObj: Command) => {
     try {
-      if (!opts.confirm && process.stdout.isTTY) {
-        const answer = await new Promise<string>((resolve) => {
-          const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-          rl.question(`Delete property "${id}"? [y/N] `, (ans) => { rl.close(); resolve(ans); });
-        });
-        if (answer.toLowerCase() !== 'y') {
-          process.stderr.write('Aborted.\n');
-          process.exit(0);
-        }
-      }
+      await confirmOrAbort(`Delete property "${id}"?`, opts.confirm);
 
       const globals = cmdObj.optsWithGlobals<GlobalOptions>();
       const serverInfo = await resolveCredentials(globals);
@@ -42,11 +34,7 @@ export function registerPropertyDeleteCommand(parent: Command): void {
 
       await client.properties.delete(id, reqOptions);
 
-      if (!process.stdout.isTTY || globals.output) {
-        process.stdout.write(JSON.stringify({ success: true, propertyId: id }) + '\n');
-      } else {
-        process.stderr.write(`Property ${id} deleted.\n`);
-      }
+      printWriteResult({ propertyId: id }, globals.output, `Property ${id} deleted.\n`);
     } catch (err) {
       handleError(err);
     }
