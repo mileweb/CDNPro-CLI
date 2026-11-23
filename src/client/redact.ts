@@ -31,8 +31,9 @@ const SENSITIVE_KEYS = new Set([
   'accesstoken',
 ]);
 
-const PEM_PRIVATE_KEY =
-  /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z0-9 ]*PRIVATE KEY-----/g;
+const PEM_BEGIN = '-----BEGIN ';
+const PEM_END = '-----END ';
+const PEM_SUFFIX = 'PRIVATE KEY';
 
 const AUTH_TOKEN = /\b(Basic|Bearer)\s+[A-Za-z0-9+/=._~-]{8,}/gi;
 
@@ -46,11 +47,56 @@ export function isSensitiveKey(key: string): boolean {
   return SENSITIVE_KEYS.has(normalizeKey(key));
 }
 
+/**
+ * Replace PEM private-key blocks with a placeholder.
+ *
+ * Implemented as a forward scan rather than a regex: a global regex with a
+ * lazy block body rescans to the end from every "-----BEGIN" marker, which is
+ * quadratic on hostile input (many BEGIN markers, no END).
+ */
+function redactPemKeys(value: string): string {
+  let out = '';
+  let pos = 0;
+  let search = 0;
+
+  for (;;) {
+    const beginAt = value.indexOf(PEM_BEGIN, search);
+    if (beginAt < 0) break;
+
+    const labelStart = beginAt + PEM_BEGIN.length;
+    const labelEnd = value.indexOf('-----', labelStart);
+    if (labelEnd < 0) break;
+    const label = value.slice(labelStart, labelEnd);
+
+    if (!label.endsWith(PEM_SUFFIX)) {
+      search = labelEnd + '-----'.length;
+      continue;
+    }
+
+    // Find the next END marker whose label is also a private key.
+    let endAt = value.indexOf(PEM_END, labelEnd + '-----'.length);
+    let endLabelEnd = -1;
+    while (endAt >= 0) {
+      endLabelEnd = value.indexOf('-----', endAt + PEM_END.length);
+      if (endLabelEnd < 0) break;
+      const endLabel = value.slice(endAt + PEM_END.length, endLabelEnd);
+      if (endLabel.endsWith(PEM_SUFFIX)) break;
+      endAt = value.indexOf(PEM_END, endLabelEnd + '-----'.length);
+    }
+    // No usable END marker remains, so no later block can match either.
+    if (endAt < 0 || endLabelEnd < 0) break;
+
+    out += value.slice(pos, beginAt) + '<redacted PEM>';
+    pos = endLabelEnd + '-----'.length;
+    search = pos;
+  }
+
+  return out + value.slice(pos);
+}
+
 /** Redact PEM private keys and Basic/Bearer tokens embedded in a string. */
 function redactString(value: string): string {
-  return value
-    .replace(PEM_PRIVATE_KEY, '<redacted PEM>')
-    .replace(AUTH_TOKEN, '$1 <redacted>');
+  return redactPemKeys(value).replace(AUTH_TOKEN, '$1 <redacted>');
 }
 
 function redactAuthorization(value: unknown): string {

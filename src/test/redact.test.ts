@@ -40,6 +40,33 @@ test('redactSensitive redacts PEM blocks under unknown keys', () => {
   assert.equal(out.blob, '<redacted PEM>');
 });
 
+test('redactSensitive redacts every PEM block in a string', () => {
+  const ec = PEM.replace('RSA ', 'EC ');
+  const out = redactSensitive({ blob: `${PEM}\nnote\n${ec}` }) as Record<string, unknown>;
+  assert.equal(out.blob, '<redacted PEM>\nnote\n<redacted PEM>');
+});
+
+test('redactSensitive leaves unterminated PEM blocks untouched', () => {
+  const out = redactSensitive({ blob: PEM.slice(0, PEM.indexOf('-----END')) });
+  assert.deepEqual(out, { blob: PEM.slice(0, PEM.indexOf('-----END')) });
+});
+
+test('redactSensitive leaves non-private PEM blocks untouched', () => {
+  const cert = '-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----';
+  const out = redactSensitive({ blob: cert }) as Record<string, unknown>;
+  assert.equal(out.blob, cert);
+});
+
+test(
+  'redactSensitive stays linear on repeated unterminated PEM headers',
+  { timeout: 2000 },
+  () => {
+    const blob = '-----BEGIN PRIVATE KEY-----'.repeat(50_000);
+    const out = redactSensitive({ blob }) as Record<string, unknown>;
+    assert.equal(out.blob, blob);
+  },
+);
+
 test('redactSensitive redacts auth tokens embedded in text', () => {
   const out = redactSensitive({ note: 'sent Basic dXNlcjpoYXNo to server' }) as Record<string, unknown>;
   assert.equal(out.note, 'sent Basic <redacted> to server');
