@@ -32,7 +32,7 @@ export class LogAggregationPoints {
     return this.api.request('DELETE', `/cdn/logAggregationPoints/${encodeURIComponent(String(id))}`, reqOptions);
   }
 
-  summary(reqOptions: RequestOptions = {}) {
-    return this.api.request('GET', '/cdn/logAggregationPoints/summaryReport', reqOptions);
+  summary(query: Record<string, unknown>, reqOptions: RequestOptions = {}) {
+    return this.api.request('GET', '/cdn/logAggregationPoints/summaryReport', { ...reqOptions, query: query as RequestOptions['query'] });
   }
 }

@@ -17,10 +17,10 @@ import {
 
 export const PURGE_CREATE_OPTIONS: OptionMapping[] = [
   { flag: '--target <env>',            target: 'body',     param: 'target',          description: 'Environment to purge: staging | production', required: true },
-  { flag: '--url <url>',               target: 'body',     param: 'urls.urls',        description: 'Exact file URL to purge; repeatable', repeatable: true },
-  { flag: '--dir <url>',               target: 'body',     param: 'dirs.dirs',        description: 'Directory URL (supports * / **); repeatable; max 20', repeatable: true },
-  { flag: '--regex <pattern>',         target: 'body',     param: 'regex.regexes',    description: 'Regex pattern (scheme://hostname/...); repeatable; max 2', repeatable: true },
-  { flag: '--header <name:value>',     target: 'body',     param: 'urls.headers',     description: 'Request header for cache-key disambiguation; repeatable', repeatable: true },
+  { flag: '--url <url>',               target: 'body',     param: 'fileUrls',         description: 'Exact file URL to purge; repeatable', repeatable: true },
+  { flag: '--dir <url>',               target: 'body',     param: 'dirUrls',          description: 'Directory URL (supports * / **); repeatable; max 20', repeatable: true },
+  { flag: '--regex <pattern>',         target: 'body',     param: 'regexPatterns',    description: 'Regex pattern (scheme://hostname/...); repeatable; max 2', repeatable: true },
+  { flag: '--header <name:value>',     target: 'body',     param: 'fileHeaders',      description: 'Request header for cache-key disambiguation; repeatable', repeatable: true },
   { flag: '--action <action>',         target: 'body',     param: 'action',           description: 'Purge action: delete | invalidate [default: invalidate]' },
   { flag: '--name <description>',      target: 'body',     param: 'name',             description: 'Friendly name for the purge request' },
   { flag: '--webhook <id>',            target: 'body',     param: 'webhook',         description: 'Webhook ID to call on completion' },
@@ -56,7 +56,7 @@ export function registerPurgeCreateCommand(parent: Command): void {
     try {
       if (opts.example) {
         const example =
-          getNamedSpecExample('/cdn/purges', 'post', 'Purge by URL') ??
+          getNamedSpecExample('/cdn/purges', 'post', 'Purge specific files') ??
           getExampleBody('/cdn/purges', 'post');
         process.stdout.write(JSON.stringify(example, null, 2) + '\n');
         return;
@@ -102,24 +102,18 @@ export function registerPurgeCreateCommand(parent: Command): void {
           target: opts.target,
         };
 
-        if (urls.length > 0) {
-          const urlsEntry: Record<string, unknown> = { urls };
-          if ((opts.header ?? []).length > 0) {
-            const headers: Record<string, string> = {};
-            for (const h of opts.header ?? []) {
-              const colonIdx = h.indexOf(':');
-              if (colonIdx < 1) {
-                throw new CliError('VALIDATION', `--header "${h}" must be in name:value format`);
-              }
-              headers[h.slice(0, colonIdx).trim()] = h.slice(colonIdx + 1).trim();
+        if (urls.length > 0) purgeBody['fileUrls'] = urls;
+        if ((opts.header ?? []).length > 0) {
+          purgeBody['fileHeaders'] = (opts.header ?? []).map((h) => {
+            const colonIdx = h.indexOf(':');
+            if (colonIdx < 1) {
+              throw new CliError('VALIDATION', `--header "${h}" must be in name:value format`);
             }
-            urlsEntry['headers'] = headers;
-          }
-          purgeBody['urls'] = urlsEntry;
+            return { name: h.slice(0, colonIdx).trim(), value: h.slice(colonIdx + 1).trim() };
+          });
         }
-
-        if (dirs.length > 0) purgeBody['dirs'] = { dirs };
-        if (regexes.length > 0) purgeBody['regex'] = { regexes };
+        if (dirs.length > 0) purgeBody['dirUrls'] = dirs;
+        if (regexes.length > 0) purgeBody['regexPatterns'] = regexes;
         purgeBody['action'] = action;
         if (opts.name) purgeBody['name'] = opts.name;
         if (opts.webhook) purgeBody['webhook'] = opts.webhook;

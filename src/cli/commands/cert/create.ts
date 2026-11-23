@@ -28,7 +28,7 @@ export const CERT_CREATE_OPTIONS: OptionMapping[] = [
   { flag: '--country <CC>',      target: 'body', param: 'newVersion.identificationInfo.country',             description: '2-letter ISO-3166 country code' },
   { flag: '--state <state>',     target: 'body', param: 'newVersion.identificationInfo.state',               description: 'State or province' },
   { flag: '--city <city>',       target: 'body', param: 'newVersion.identificationInfo.city',                description: 'Locality' },
-  { flag: '--company <org>',     target: 'body', param: 'newVersion.identificationInfo.organization',         description: 'Organization' },
+  { flag: '--company <org>',     target: 'body', param: 'newVersion.identificationInfo.company',        description: 'Organization' },
   { flag: '--department <ou>',   target: 'body', param: 'newVersion.identificationInfo.department',           description: 'Organizational unit' },
   { flag: '--email <email>',     target: 'body', param: 'newVersion.identificationInfo.email',                description: 'Email address' },
   { flag: '--comments <text>',   target: 'body', param: 'newVersion.comments',               description: 'Version comments' },
@@ -172,7 +172,7 @@ export function registerCertCreateCommand(parent: Command): void {
         if (opts.country) identificationInfo['country'] = opts.country;
         if (opts.state) identificationInfo['state'] = opts.state;
         if (opts.city) identificationInfo['city'] = opts.city;
-        if (opts.company) identificationInfo['organization'] = opts.company;
+        if (opts.company) identificationInfo['company'] = opts.company;
         if (opts.department) identificationInfo['department'] = opts.department;
         if (opts.email) identificationInfo['email'] = opts.email;
 

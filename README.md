@@ -441,7 +441,8 @@ cdnpro log-config get|create|update|delete
 
 ```bash
 cdnpro log-aggregation-point list [--search <keyword>]
-cdnpro log-aggregation-point get|create|update|delete|summary
+cdnpro log-aggregation-point get|create|update|delete
+cdnpro log-aggregation-point summary --from <date> --to <date>
 ```
 
 #### Annotations
