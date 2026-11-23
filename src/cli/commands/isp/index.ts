@@ -37,7 +37,7 @@ export function registerIspCommands(parent: Command): void {
 
       const { query } = buildRequestFromMapping(opts, ISP_LIST_OPTIONS, globals);
 
-      const data = await client.geo.isps(query);
+      const data = await client.geo.isps(query, globals.verbose ? { verbose: globals.verbose } : {});
       const { items, meta } = buildMeta(data);
 
       const effectiveFmt = fmt ?? (process.stdout.isTTY ? 'table' : 'json');

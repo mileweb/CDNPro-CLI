@@ -11,6 +11,7 @@ import {
   OptionMapping,
   FILE_EXAMPLE,
   registerOptionsFromMapping,
+  checkFileConflicts,
   registerMappings,
 } from '../../option-map';
 
@@ -40,7 +41,7 @@ interface CreateOpts {
 export function registerValidationCreateCommand(parent: Command): void {
   const cmd = parent
     .command('create')
-    .description('Create a validation task from a JSON body file');
+    .description('Create a validation task for a property version (from flags or a JSON body file)');
 
   registerOptionsFromMapping(cmd, VALIDATION_CREATE_OPTIONS);
   registerMappings('validation', 'create', VALIDATION_CREATE_OPTIONS);
@@ -59,6 +60,7 @@ export function registerValidationCreateCommand(parent: Command): void {
       let body: unknown;
 
       if (opts.file) {
+        checkFileConflicts(opts, VALIDATION_CREATE_OPTIONS);
         body = readBodyFile(opts.file);
       } else {
         checkRequiredOption(opts.propertyId, '--property-id <id>');

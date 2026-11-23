@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import { Command } from 'commander';
 import { resolveCredentials, GlobalOptions } from '../../config';
 import { CDNProClient } from '../../../client/CDNProClient';
-import { printResult, OutputFormat } from '../../output';
+import { printResult, printWriteResult, OutputFormat } from '../../output';
 import { handleError } from '../../errors';
 import { CliError } from '../../errors';
 import {
@@ -48,7 +48,7 @@ export function registerCertDownloadCsrCommand(parent: Command): void {
         } catch (e) {
           throw new CliError('ERROR', `Cannot write to "${opts.out}": ${(e as Error).message}`);
         }
-        if (process.stdout.isTTY) process.stderr.write(`CSR written to ${opts.out}\n`);
+        printWriteResult({ file: opts.out }, globals.output, `CSR written to ${opts.out}`);
         return;
       }
 

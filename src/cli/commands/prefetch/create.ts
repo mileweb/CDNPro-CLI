@@ -11,6 +11,7 @@ import {
   OptionMapping,
   FILE_EXAMPLE,
   registerOptionsFromMapping,
+  checkFileConflicts,
   registerMappings,
 } from '../../option-map';
 
@@ -61,6 +62,7 @@ export function registerPrefetchCreateCommand(parent: Command): void {
       let body: unknown;
 
       if (opts.file) {
+        checkFileConflicts(opts, PREFETCH_CREATE_OPTIONS);
         body = readBodyFile(opts.file);
       } else {
         const urls = opts.url ?? [];

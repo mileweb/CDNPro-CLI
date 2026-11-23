@@ -12,6 +12,7 @@ import {
   OptionMapping,
   FILE_EXAMPLE,
   registerOptionsFromMapping,
+  checkFileConflicts,
   registerMappings,
 } from '../../option-map';
 
@@ -141,6 +142,7 @@ export function registerCertUpdateCommand(parent: Command): void {
       }
 
       const globals = cmdObj.optsWithGlobals<GlobalOptions>();
+      if (isFile) checkFileConflicts(opts, CERT_UPDATE_OPTIONS);
 
       let body: Record<string, unknown>;
       let uploadKeyPem: string | undefined;

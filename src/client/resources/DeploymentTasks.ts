@@ -1,4 +1,4 @@
-import { ApiCore, RequestOptions } from '../ApiCore';
+import { ApiCore, RequestOptions, pathSegment } from '../ApiCore';
 
 export class DeploymentTasks {
   private api: ApiCore;
@@ -12,8 +12,7 @@ export class DeploymentTasks {
   }
 
   get(id: string, reqOptions: RequestOptions = {}) {
-    if (!id) throw new Error('id is required');
-    return this.api.request('GET', `/cdn/deploymentTasks/${encodeURIComponent(id)}`, reqOptions);
+    return this.api.request('GET', `/cdn/deploymentTasks/${pathSegment(id, 'id')}`, reqOptions);
   }
 
   create(body: unknown, reqOptions: RequestOptions = {}) {

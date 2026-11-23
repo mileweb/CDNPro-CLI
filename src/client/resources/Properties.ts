@@ -1,4 +1,4 @@
-import { ApiCore, RequestOptions } from '../ApiCore';
+import { ApiCore, RequestOptions, pathSegment } from '../ApiCore';
 
 export class Properties {
   private api: ApiCore;
@@ -12,8 +12,7 @@ export class Properties {
   }
 
   get(propertyID: string, reqOptions: RequestOptions = {}) {
-    if (!propertyID) throw new Error('propertyID is required');
-    return this.api.request('GET', `/cdn/properties/${encodeURIComponent(propertyID)}`, reqOptions);
+    return this.api.request('GET', `/cdn/properties/${pathSegment(propertyID, 'propertyID')}`, reqOptions);
   }
 
   create(body: unknown, reqOptions: RequestOptions = {}) {
@@ -22,54 +21,44 @@ export class Properties {
   }
 
   update(propertyID: string, patchBody: unknown, reqOptions: RequestOptions = {}) {
-    if (!propertyID) throw new Error('propertyID is required');
     if (!patchBody) throw new Error('patchBody is required');
-    return this.api.request('PATCH', `/cdn/properties/${encodeURIComponent(propertyID)}`, { ...reqOptions, body: patchBody });
+    return this.api.request('PATCH', `/cdn/properties/${pathSegment(propertyID, 'propertyID')}`, { ...reqOptions, body: patchBody });
   }
 
   delete(propertyID: string, reqOptions: RequestOptions = {}) {
-    if (!propertyID) throw new Error('propertyID is required');
-    return this.api.request('DELETE', `/cdn/properties/${encodeURIComponent(propertyID)}`, reqOptions);
+    return this.api.request('DELETE', `/cdn/properties/${pathSegment(propertyID, 'propertyID')}`, reqOptions);
   }
 
   listVersions(propertyID: string, query: Record<string, unknown> = {}, reqOptions: RequestOptions = {}) {
-    if (!propertyID) throw new Error('propertyID is required');
-    return this.api.request('GET', `/cdn/properties/${encodeURIComponent(propertyID)}/versions`, { ...reqOptions, query: query as RequestOptions['query'] });
+    return this.api.request('GET', `/cdn/properties/${pathSegment(propertyID, 'propertyID')}/versions`, { ...reqOptions, query: query as RequestOptions['query'] });
   }
 
   createVersion(propertyID: string, body: unknown, reqOptions: RequestOptions = {}) {
-    if (!propertyID) throw new Error('propertyID is required');
     if (!body) throw new Error('body is required');
-    return this.api.request('POST', `/cdn/properties/${encodeURIComponent(propertyID)}/versions`, { ...reqOptions, body });
+    return this.api.request('POST', `/cdn/properties/${pathSegment(propertyID, 'propertyID')}/versions`, { ...reqOptions, body });
   }
 
   getVersion(propertyID: string, version: string | number, reqOptions: RequestOptions = {}) {
-    if (!propertyID) throw new Error('propertyID is required');
-    if (version === undefined || version === null || version === '') throw new Error('version is required');
     return this.api.request(
       'GET',
-      `/cdn/properties/${encodeURIComponent(propertyID)}/versions/${encodeURIComponent(String(version))}`,
+      `/cdn/properties/${pathSegment(propertyID, 'propertyID')}/versions/${pathSegment(version, 'version')}`,
       reqOptions,
     );
   }
 
   patchVersion(propertyID: string, version: string | number, body: unknown, reqOptions: RequestOptions = {}) {
-    if (!propertyID) throw new Error('propertyID is required');
-    if (version === undefined || version === null || version === '') throw new Error('version is required');
     if (!body) throw new Error('body is required');
     return this.api.request(
       'PATCH',
-      `/cdn/properties/${encodeURIComponent(propertyID)}/versions/${encodeURIComponent(String(version))}`,
+      `/cdn/properties/${pathSegment(propertyID, 'propertyID')}/versions/${pathSegment(version, 'version')}`,
       { ...reqOptions, body },
     );
   }
 
   deleteVersion(propertyID: string, version: string | number, reqOptions: RequestOptions = {}) {
-    if (!propertyID) throw new Error('propertyID is required');
-    if (version === undefined || version === null || version === '') throw new Error('version is required');
     return this.api.request(
       'DELETE',
-      `/cdn/properties/${encodeURIComponent(propertyID)}/versions/${encodeURIComponent(String(version))}`,
+      `/cdn/properties/${pathSegment(propertyID, 'propertyID')}/versions/${pathSegment(version, 'version')}`,
       reqOptions,
     );
   }

@@ -1,5 +1,6 @@
 import ora from 'ora';
 import { CliError } from './errors';
+import { sanitizeForTerminal } from './sanitize';
 import type { OutputFormat } from './output';
 
 export type TaskType = 'deployment' | 'purge' | 'prefetch' | 'validation';
@@ -97,7 +98,10 @@ export async function waitForTask(
     opts.outputFormat !== 'json' &&
     opts.outputFormat !== 'jsonl';
 
-  const spinner = isInteractive ? ora(`Waiting for task ${taskId}…`).start() : null;
+  // taskId, status and statusDetails all come from the server; keep control
+  // characters out of the terminal.
+  const label = sanitizeForTerminal(taskId);
+  const spinner = isInteractive ? ora(`Waiting for task ${label}…`).start() : null;
   let consecutiveErrors = 0;
 
   // Always poll at least once, and poll once more at the deadline: sleeping a
@@ -113,7 +117,7 @@ export async function waitForTask(
       // 5xx, dropped connection) should not abort the wait.
       consecutiveErrors += 1;
       if (!isTransientPollError(err) || consecutiveErrors > MAX_CONSECUTIVE_POLL_ERRORS) {
-        if (spinner) spinner.fail(`Task ${taskId}: polling failed`);
+        if (spinner) spinner.fail(`Task ${label}: polling failed`);
         throw err;
       }
       if (Date.now() >= deadline) break;
@@ -126,7 +130,7 @@ export async function waitForTask(
 
     if (resolution === 'success') {
       if (isInteractive) {
-        spinner!.succeed(`Task ${taskId} completed`);
+        spinner!.succeed(`Task ${label} completed`);
       } else {
         process.stdout.write(
           JSON.stringify({ event: 'done', taskId, data: task }) + '\n',
@@ -138,7 +142,7 @@ export async function waitForTask(
     if (resolution === 'failure') {
       const reason = state.statusDetails ?? 'unknown reason';
       if (isInteractive) {
-        spinner!.fail(`Task ${taskId} failed: ${reason}`);
+        spinner!.fail(`Task ${label} failed: ${sanitizeForTerminal(reason)}`);
       }
       throw new CliError('ERROR', `Task ${taskId} failed: ${reason}`, task);
     }
@@ -147,7 +151,7 @@ export async function waitForTask(
     const progressText =
       state.progressPercent != null ? ` ${state.progressPercent}%` : '';
     if (isInteractive) {
-      spinner!.text = `Task ${taskId}: ${state.status}${progressText}`;
+      spinner!.text = `Task ${label}: ${sanitizeForTerminal(state.status)}${progressText}`;
     } else {
       process.stdout.write(
         JSON.stringify({
@@ -163,7 +167,7 @@ export async function waitForTask(
     await sleepUntil(opts.pollInterval * 1000, deadline);
   }
 
-  if (spinner) spinner.fail(`Task ${taskId} timed out after ${opts.timeout}s`);
+  if (spinner) spinner.fail(`Task ${label} timed out after ${opts.timeout}s`);
   throw new CliError('TIMEOUT', `Task ${taskId} did not complete within ${opts.timeout}s`);
 }
 

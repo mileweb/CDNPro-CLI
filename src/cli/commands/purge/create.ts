@@ -12,6 +12,7 @@ import {
   OptionMapping,
   FILE_EXAMPLE,
   registerOptionsFromMapping,
+  checkFileConflicts,
   registerMappings,
 } from '../../option-map';
 
@@ -68,6 +69,7 @@ export function registerPurgeCreateCommand(parent: Command): void {
       let body: unknown;
 
       if (opts.file) {
+        checkFileConflicts(opts, PURGE_CREATE_OPTIONS);
         body = readBodyFile(opts.file);
       } else {
         checkRequiredOption(opts.target, '--target <env>');

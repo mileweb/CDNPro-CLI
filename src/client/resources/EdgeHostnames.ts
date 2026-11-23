@@ -1,4 +1,4 @@
-import { ApiCore, RequestOptions } from '../ApiCore';
+import { ApiCore, RequestOptions, pathSegment } from '../ApiCore';
 
 export class EdgeHostnames {
   private api: ApiCore;
@@ -12,8 +12,7 @@ export class EdgeHostnames {
   }
 
   get(edgeHostname: string, reqOptions: RequestOptions = {}) {
-    if (!edgeHostname) throw new Error('edgeHostname is required');
-    return this.api.request('GET', `/cdn/edgeHostnames/${encodeURIComponent(edgeHostname)}`, reqOptions);
+    return this.api.request('GET', `/cdn/edgeHostnames/${pathSegment(edgeHostname, 'edgeHostname')}`, reqOptions);
   }
 
   create(body: unknown, reqOptions: RequestOptions = {}) {
@@ -22,19 +21,16 @@ export class EdgeHostnames {
   }
 
   replace(edgeHostname: string, body: unknown, reqOptions: RequestOptions = {}) {
-    if (!edgeHostname) throw new Error('edgeHostname is required');
     if (!body) throw new Error('body is required');
-    return this.api.request('PUT', `/cdn/edgeHostnames/${encodeURIComponent(edgeHostname)}`, { ...reqOptions, body });
+    return this.api.request('PUT', `/cdn/edgeHostnames/${pathSegment(edgeHostname, 'edgeHostname')}`, { ...reqOptions, body });
   }
 
   update(edgeHostname: string, patchBody: unknown, reqOptions: RequestOptions = {}) {
-    if (!edgeHostname) throw new Error('edgeHostname is required');
     if (!patchBody) throw new Error('patchBody is required');
-    return this.api.request('PATCH', `/cdn/edgeHostnames/${encodeURIComponent(edgeHostname)}`, { ...reqOptions, body: patchBody });
+    return this.api.request('PATCH', `/cdn/edgeHostnames/${pathSegment(edgeHostname, 'edgeHostname')}`, { ...reqOptions, body: patchBody });
   }
 
   delete(edgeHostname: string, reqOptions: RequestOptions = {}) {
-    if (!edgeHostname) throw new Error('edgeHostname is required');
-    return this.api.request('DELETE', `/cdn/edgeHostnames/${encodeURIComponent(edgeHostname)}`, reqOptions);
+    return this.api.request('DELETE', `/cdn/edgeHostnames/${pathSegment(edgeHostname, 'edgeHostname')}`, reqOptions);
   }
 }

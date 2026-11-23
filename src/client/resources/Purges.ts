@@ -1,4 +1,4 @@
-import { ApiCore, RequestOptions } from '../ApiCore';
+import { ApiCore, RequestOptions, pathSegment } from '../ApiCore';
 
 export class Purges {
   private api: ApiCore;
@@ -17,8 +17,7 @@ export class Purges {
   }
 
   get(id: string, reqOptions: RequestOptions = {}) {
-    if (!id) throw new Error('id is required');
-    return this.api.request('GET', `/cdn/purges/${encodeURIComponent(id)}`, reqOptions);
+    return this.api.request('GET', `/cdn/purges/${pathSegment(id, 'id')}`, reqOptions);
   }
 
   summary(query: Record<string, unknown> = {}, reqOptions: RequestOptions = {}) {

@@ -1,4 +1,4 @@
-import { ApiCore, RequestOptions } from '../ApiCore';
+import { ApiCore, RequestOptions, pathSegment } from '../ApiCore';
 
 export class Certificates {
   private api: ApiCore;
@@ -12,8 +12,7 @@ export class Certificates {
   }
 
   get(certificateID: string, reqOptions: RequestOptions = {}) {
-    if (!certificateID) throw new Error('certificateID is required');
-    return this.api.request('GET', `/cdn/certificates/${encodeURIComponent(certificateID)}`, reqOptions);
+    return this.api.request('GET', `/cdn/certificates/${pathSegment(certificateID, 'certificateID')}`, reqOptions);
   }
 
   create(body: unknown, reqOptions: RequestOptions = {}) {
@@ -22,37 +21,30 @@ export class Certificates {
   }
 
   update(certificateID: string, patchBody: unknown, reqOptions: RequestOptions = {}) {
-    if (!certificateID) throw new Error('certificateID is required');
     if (!patchBody) throw new Error('patchBody is required');
-    return this.api.request('PATCH', `/cdn/certificates/${encodeURIComponent(certificateID)}`, { ...reqOptions, body: patchBody });
+    return this.api.request('PATCH', `/cdn/certificates/${pathSegment(certificateID, 'certificateID')}`, { ...reqOptions, body: patchBody });
   }
 
   delete(certificateID: string, reqOptions: RequestOptions = {}) {
-    if (!certificateID) throw new Error('certificateID is required');
-    return this.api.request('DELETE', `/cdn/certificates/${encodeURIComponent(certificateID)}`, reqOptions);
+    return this.api.request('DELETE', `/cdn/certificates/${pathSegment(certificateID, 'certificateID')}`, reqOptions);
   }
 
   downloadCSR(certificateID: string, query: Record<string, unknown> = {}, reqOptions: RequestOptions = {}) {
-    if (!certificateID) throw new Error('certificateID is required');
-    return this.api.request('GET', `/cdn/certificates/${encodeURIComponent(certificateID)}/csr`, { ...reqOptions, query: query as RequestOptions['query'] });
+    return this.api.request('GET', `/cdn/certificates/${pathSegment(certificateID, 'certificateID')}/csr`, { ...reqOptions, query: query as RequestOptions['query'] });
   }
 
   getVersion(certificateID: string, version: string | number, reqOptions: RequestOptions = {}) {
-    if (!certificateID) throw new Error('certificateID is required');
-    if (version === undefined || version === null || version === '') throw new Error('version is required');
     return this.api.request(
       'GET',
-      `/cdn/certificates/${encodeURIComponent(certificateID)}/versions/${encodeURIComponent(String(version))}`,
+      `/cdn/certificates/${pathSegment(certificateID, 'certificateID')}/versions/${pathSegment(version, 'version')}`,
       reqOptions,
     );
   }
 
   deleteVersion(certificateID: string, version: string | number, reqOptions: RequestOptions = {}) {
-    if (!certificateID) throw new Error('certificateID is required');
-    if (version === undefined || version === null || version === '') throw new Error('version is required');
     return this.api.request(
       'DELETE',
-      `/cdn/certificates/${encodeURIComponent(certificateID)}/versions/${encodeURIComponent(String(version))}`,
+      `/cdn/certificates/${pathSegment(certificateID, 'certificateID')}/versions/${pathSegment(version, 'version')}`,
       reqOptions,
     );
   }

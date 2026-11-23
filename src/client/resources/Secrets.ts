@@ -1,4 +1,4 @@
-import { ApiCore, RequestOptions } from '../ApiCore';
+import { ApiCore, RequestOptions, pathSegment } from '../ApiCore';
 
 export class Secrets {
   private api: ApiCore;
@@ -12,8 +12,7 @@ export class Secrets {
   }
 
   get(secretID: string, reqOptions: RequestOptions = {}) {
-    if (!secretID) throw new Error('secretID is required');
-    return this.api.request('GET', `/cdn/secrets/${encodeURIComponent(secretID)}`, reqOptions);
+    return this.api.request('GET', `/cdn/secrets/${pathSegment(secretID, 'secretID')}`, reqOptions);
   }
 
   create(body: unknown, reqOptions: RequestOptions = {}) {
@@ -22,13 +21,11 @@ export class Secrets {
   }
 
   update(secretID: string, patchBody: unknown, reqOptions: RequestOptions = {}) {
-    if (!secretID) throw new Error('secretID is required');
     if (!patchBody) throw new Error('patchBody is required');
-    return this.api.request('PATCH', `/cdn/secrets/${encodeURIComponent(secretID)}`, { ...reqOptions, body: patchBody });
+    return this.api.request('PATCH', `/cdn/secrets/${pathSegment(secretID, 'secretID')}`, { ...reqOptions, body: patchBody });
   }
 
   delete(secretID: string, reqOptions: RequestOptions = {}) {
-    if (!secretID) throw new Error('secretID is required');
-    return this.api.request('DELETE', `/cdn/secrets/${encodeURIComponent(secretID)}`, reqOptions);
+    return this.api.request('DELETE', `/cdn/secrets/${pathSegment(secretID, 'secretID')}`, reqOptions);
   }
 }

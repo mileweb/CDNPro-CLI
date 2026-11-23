@@ -11,6 +11,7 @@ import {
   OptionMapping,
   FILE_EXAMPLE,
   registerOptionsFromMapping,
+  checkFileConflicts,
   registerMappings,
 } from '../../option-map';
 
@@ -92,6 +93,7 @@ export function registerDeployCreateCommand(parent: Command): void {
       let body: unknown;
 
       if (opts.file) {
+        checkFileConflicts(opts, DEPLOY_CREATE_OPTIONS);
         body = readBodyFile(opts.file);
       } else {
         checkRequiredOption(opts.target, '--target <env>');

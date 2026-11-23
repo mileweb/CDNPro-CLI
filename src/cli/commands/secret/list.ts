@@ -7,6 +7,7 @@ import { resolveListPaging, paginateOffset } from '../../paginate';
 import {
   OptionMapping,
   PAGINATION_OPTIONS,
+  REPORT_RANGE,
   ALL,
   MAX_PAGES,
   registerOptionsFromMapping,
@@ -17,6 +18,7 @@ import {
 export const SECRET_LIST_OPTIONS: OptionMapping[] = [
   { flag: '--search <term>', target: 'query', param: 'search', description: 'Keyword search' },
   ...PAGINATION_OPTIONS,
+  REPORT_RANGE,
   ALL,
   MAX_PAGES,
 ];

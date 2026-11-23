@@ -22,7 +22,7 @@ export const PURGE_LIST_OPTIONS: OptionMapping[] = [
   { flag: '--target <env>',            target: 'query', param: 'target',         description: 'Filter by environment: staging | production' },
   { flag: '--action <action>',         target: 'query', param: 'action',         description: 'Filter by purge action: invalidate | delete' },
   { flag: '--search <term>',           target: 'query', param: 'search',         description: 'Match on hostname or purge task ID' },
-  { flag: '--max-success-rate <rate>', target: 'query', param: 'maxSuccessRate', description: 'Filter by max success rate (0-1)' },
+  { flag: '--max-success-rate <rate>', target: 'query', param: 'maxSuccessRate', description: 'Filter by max success rate, as a percentage (0-100)' },
   ...SORT_OPTIONS,
   ...PAGINATION_OPTIONS,
   REPORT_RANGE,

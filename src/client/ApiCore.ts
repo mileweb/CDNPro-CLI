@@ -58,6 +58,27 @@ interface ApiError extends Error {
   ctx?: ResponseContext;
 }
 
+/** A caller-supplied value the client refuses to put in a request (checked before any I/O). */
+export class InvalidArgumentError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'InvalidArgumentError';
+  }
+}
+
+/**
+ * Encode a caller-supplied value for use as ONE path segment. encodeURIComponent
+ * neutralises '/', '?', '#' and '%', but leaves '.' alone, so '..' would still
+ * climb a directory ("/cdn/certificates/../versions/1"). Empty values and the
+ * dot segments are rejected outright.
+ */
+export function pathSegment(value: string | number, name = 'id'): string {
+  if (value === undefined || value === null || value === '') throw new InvalidArgumentError(`${name} is required`);
+  const text = String(value);
+  if (text === '.' || text === '..') throw new InvalidArgumentError(`${name} must not be "." or ".."`);
+  return encodeURIComponent(text);
+}
+
 function isPlainObject(v: unknown): v is Record<string, unknown> {
   return v != null && typeof v === 'object' && !Array.isArray(v);
 }

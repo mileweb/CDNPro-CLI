@@ -11,6 +11,7 @@ import {
   OptionMapping,
   FILE_EXAMPLE,
   registerOptionsFromMapping,
+  checkFileConflicts,
   buildRequestFromMapping,
   checkRequiredMappings,
   registerMappings,
@@ -88,6 +89,7 @@ export function registerReportCommands(parent: Command): void {
       }
 
       checkRequiredMappings(opts, REPORT_LOGS_OPTIONS);
+      checkFileConflicts(opts, REPORT_LOGS_OPTIONS);
 
       const globals = cmdObj.optsWithGlobals<GlobalOptions>();
 

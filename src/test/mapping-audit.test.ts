@@ -115,3 +115,20 @@ test('required query parameters are marked required in the option mappings', () 
   }
   assert.deepEqual(problems, []);
 });
+
+test('every query/header parameter an operation declares has a CLI flag', () => {
+  const problems: string[] = [];
+  const spec = getSpec() as unknown as { paths: Record<string, Record<string, { parameters?: Array<Record<string, unknown>> }>> };
+  for (const { resource, operation, mappings } of getAllMappings()) {
+    const entry = lookupOperation(resource, operation);
+    if (!entry) continue;
+    for (const p of spec.paths[entry.path]?.[entry.method]?.parameters ?? []) {
+      if (p['in'] !== 'query' && p['in'] !== 'header') continue;
+      if (p['name'] === 'On-Behalf-Of') continue; // global --on-behalf-of
+      if (!mappings.some((m) => m.target === p['in'] && m.param === p['name'])) {
+        problems.push(`${resource}.${operation}: ${String(p['in'])} parameter "${String(p['name'])}" has no flag`);
+      }
+    }
+  }
+  assert.deepEqual(problems, []);
+});

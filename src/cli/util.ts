@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import * as readline from 'readline';
 import { CliError, outputsHumanErrors } from './errors';
 import { OptionMapping, flagForBodyPath } from './option-map';
 import { validateBody, ValidationResult } from '../schema/validate';
@@ -129,6 +130,41 @@ export function parseIntegerOption(value: string, flagName: string): number {
 }
 
 export const OUTPUT_FORMATS = ['table', 'json', 'jsonl'] as const;
+
+/**
+ * Ask "<question> [y/N]" before a destructive action.
+ *
+ * - `--confirm` skips the prompt.
+ * - When stdout is not a terminal (scripts, agents) there is nobody to ask, so the
+ *   action proceeds without prompting; pass `--confirm` to make that explicit.
+ * - Declining, or stdin reaching EOF before an answer, aborts with a non-zero exit
+ *   so `cdnpro ... delete x && next-step` never continues after nothing was deleted.
+ */
+export async function confirmOrAbort(question: string, confirmed?: boolean): Promise<void> {
+  if (confirmed === true || !process.stdout.isTTY) return;
+
+  const answer = await new Promise<string | null>((resolve) => {
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    let answered = false;
+    rl.on('close', () => { if (!answered) resolve(null); });
+    rl.question(`${question} [y/N] `, (ans) => {
+      answered = true;
+      rl.close();
+      resolve(ans);
+    });
+  });
+
+  if (answer === null) {
+    throw new CliError(
+      'ERROR',
+      'No confirmation received (stdin closed). Re-run with --confirm to proceed non-interactively.',
+    );
+  }
+  if (!['y', 'yes'].includes(answer.trim().toLowerCase())) {
+    process.stderr.write('Aborted.\n');
+    throw new CliError('ERROR', 'Aborted.', undefined, true);
+  }
+}
 
 /** Reject unsupported --output values with exit code 4. */
 export function validateOutputOption(value: unknown): void {

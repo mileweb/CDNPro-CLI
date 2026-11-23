@@ -1,4 +1,6 @@
 import chalk from 'chalk';
+import { sanitizeForTerminal } from './sanitize';
+import { InvalidArgumentError } from '../client/ApiCore';
 
 export const EXIT_CODES = {
   SUCCESS: 0,
@@ -84,12 +86,12 @@ function printError(payload: {
   details?: unknown;
 }): void {
   if (outputsHumanErrors(currentOutput)) {
-    process.stderr.write(chalk.red(`Error [${payload.code}]: ${payload.message}\n`));
+    process.stderr.write(chalk.red(`Error [${payload.code}]: ${sanitizeForTerminal(payload.message)}\n`));
     if (payload.body) {
       const bodyStr = typeof payload.body === 'string'
         ? payload.body
         : JSON.stringify(payload.body, null, 2);
-      process.stderr.write(chalk.dim(bodyStr) + '\n');
+      process.stderr.write(chalk.dim(sanitizeForTerminal(bodyStr)) + '\n');
     }
   } else {
     process.stdout.write(
@@ -112,6 +114,12 @@ export function handleError(err: unknown): never {
       printError({ code: err.code, message: err.message, details: err.details });
     }
     process.exit(EXIT_CODES[err.code]);
+  }
+
+  // Bad caller input rejected by the client before any request was made.
+  if (err instanceof InvalidArgumentError) {
+    printError({ code: 'VALIDATION', message: err.message });
+    process.exit(EXIT_CODES.VALIDATION);
   }
 
   // Socket-level timeouts (including our own 30s request timeout) have no

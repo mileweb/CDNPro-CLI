@@ -12,6 +12,7 @@ import {
   OptionMapping,
   FILE_EXAMPLE,
   registerOptionsFromMapping,
+  checkFileConflicts,
   registerMappings,
 } from '../../option-map';
 
@@ -127,6 +128,7 @@ export function registerCertCreateCommand(parent: Command): void {
       }
 
       const globals = cmdObj.optsWithGlobals<GlobalOptions>();
+      if (isFile) checkFileConflicts(opts, CERT_CREATE_OPTIONS);
 
       // --name is required for every flag-built mode; --file supplies its own body.
       if (!isFile && !opts.name) {

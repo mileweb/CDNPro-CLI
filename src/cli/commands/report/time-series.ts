@@ -11,6 +11,7 @@ import {
   REPORT_RANGE,
   FILE_EXAMPLE,
   registerOptionsFromMapping,
+  checkFileConflicts,
   buildRequestFromMapping,
   registerMappings,
   checkRequiredMappings,
@@ -107,6 +108,7 @@ export function registerTimeSeriesReportCommand(
       }
 
       checkRequiredMappings(opts, options);
+      checkFileConflicts(opts, options);
 
       const globals = cmdObj.optsWithGlobals<GlobalOptions>();
 

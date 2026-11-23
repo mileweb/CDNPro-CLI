@@ -1,4 +1,4 @@
-import { ApiCore, RequestOptions } from '../ApiCore';
+import { ApiCore, RequestOptions, pathSegment } from '../ApiCore';
 
 export class Hostnames {
   private api: ApiCore;
@@ -12,7 +12,6 @@ export class Hostnames {
   }
 
   get(hostname: string, reqOptions: RequestOptions = {}) {
-    if (!hostname) throw new Error('hostname is required');
-    return this.api.request('GET', `/cdn/hostnames/${encodeURIComponent(hostname)}`, reqOptions);
+    return this.api.request('GET', `/cdn/hostnames/${pathSegment(hostname, 'hostname')}`, reqOptions);
   }
 }

@@ -111,8 +111,14 @@ incidental exposure, but it cannot hide a payload from a caller running under th
 - If you use a file, restrict it: `chmod 600 secret.json`. The CLI does not check file
   permissions; securing the file is the caller's responsibility. (Windows ACLs work the same way
   but are not inspected either.)
-- Never pass secrets as command-line arguments or environment variables: argv and environment are
-  visible to other processes (`ps`, `/proc/<pid>/environ`) and often to shell history.
+- Keep secrets out of command-line arguments: argv is visible to other processes (`ps`) and often to
+  shell history. That includes the global `--secret-key` flag, so for your *API credentials* prefer a
+  saved profile (the secret goes to the OS keychain) and, for CI, the `CDNPRO_SECRETKEY` environment
+  variable populated from your CI's secret store. Environment variables are less exposed than argv,
+  but a same-user process can still read `/proc/<pid>/environ`. Secrets inside request bodies belong
+  in `--file -` / a restricted file, as above.
+- `secret get` prints the stored secret text and `webhook get` prints `credentials.secretKey`, exactly
+  as the API returns them. Treat that output (and anything it is piped or logged to) as sensitive.
 - `-v`/`-vv` diagnostics go to **stderr**, so they never corrupt piped JSON. `-vv` redacts the
   `Authorization` header and sensitive body fields (`privateKey`, `secret`, `secretKey`, `apiKey`,
   passwords, tokens, PEM private keys). Redaction is best-effort — still treat logs as sensitive.
@@ -176,6 +182,23 @@ JSONL:
   error (exit code 1).
 
 ## Commands
+
+**Behaviour shared by many commands**
+
+- **`--confirm` on `delete`.** Every `delete` command asks `[y/N]` in an interactive terminal; `--confirm`
+  skips the prompt. When stdout is not a terminal (scripts, agents) there is no prompt and the delete
+  proceeds, so pass `--confirm` to make that intent explicit. Answering no, or closing stdin before
+  answering, exits with code 1 and deletes nothing.
+- **`--if-unmodified-since <date>` on updates.** `update` (and `edge-hostname replace`) for properties,
+  property versions, edge hostnames, secrets, webhooks, log configs, log aggregation points, service
+  quotas, and API permissions sends `If-Unmodified-Since`, so the change fails with exit code 10
+  (precondition failed) if the resource changed since you read it. Accepts an HTTP-date (the API's
+  `Last-Modified`) or an RFC 3339 date-time.
+- **`--file` is exclusive.** `--file` supplies the whole request body. Combining it with flags that
+  build body content (for example `purge create --file p.json --url ...`) is an error (exit code 4)
+  instead of silently ignoring one of them. Flags that map to query parameters or headers still apply.
+- **Terminal output is sanitized.** In table output, control characters in API-supplied text are shown
+  as `\xNN` escapes so they cannot manipulate your terminal. JSON/JSONL output is unaffected.
 
 ### Properties
 
@@ -371,10 +394,10 @@ cdnpro purge list [--from <date>] [--to <date>] [--target <staging|production>]
 cdnpro purge get <id>
 cdnpro purge summary --from <date> --to <date> [--target <staging|production>]
 cdnpro purge tokens
-cdnpro purge create --target <staging|production> [--url <url>] [--dir <dir>] [--regex <pattern>] [--file <path>] [--example] [--wait] [--timeout <seconds>] [--poll-interval <seconds>]
+cdnpro purge create --target <staging|production> [--url <url>] [--dir <dir>] [--regex <pattern>] [--header <name:value>] [--action <invalidate|delete>] [--name <text>] [--webhook <id>] [--file <path>] [--example] [--wait] [--timeout <seconds>] [--poll-interval <seconds>]
 ```
 
-`purge create` requires at least one of `--url`, `--dir`, `--regex`, or `--file`; `--target` is required unless `--file` is used (the body file must contain it).
+`purge create` requires at least one of `--url`, `--dir`, `--regex`, or `--file`; `--target` is required unless `--file` is used (the body file must contain it). `--header` (repeatable, `name:value`) selects which cached variant of the `--url` files to purge and requires at least one `--url`. `--action` defaults to `invalidate`; `--dir` accepts at most 20 entries and `--regex` at most 2.
 
 #### Prefetch
 
@@ -401,7 +424,7 @@ cdnpro edge-hostname get <id>
 cdnpro edge-hostname create --file <path>
 cdnpro edge-hostname update <id> --file <path>
 cdnpro edge-hostname replace <id> --file <path>
-cdnpro edge-hostname delete <id>
+cdnpro edge-hostname delete <id> [--skip-usage-check] [--confirm]   # --skip-usage-check sends Check-Usage: no
 ```
 
 ### Hostnames
@@ -423,7 +446,7 @@ cdnpro hostname-history get <hostname> [--from <date>] [--to <date>] [--target <
 #### Secrets
 
 ```bash
-cdnpro secret list [--search <keyword>] [--limit <n>] [--offset <n>] [--all]
+cdnpro secret list [--search <keyword>] [--limit <n>] [--offset <n>] [--report-range <scope>] [--all]
 cdnpro secret get|create|update|delete
 ```
 
@@ -464,7 +487,9 @@ cdnpro annotation get|create|update|delete
 ```bash
 cdnpro service-quota list [--search <keyword>] [--status <active|suspended|trial|terminated>]
                           [--allow-production <true|false>]
-                          [--advanced-features <features>] [--limit <n>]
+                          [--advanced-features <features>] [--usage-limit]
+                          [--allowed-cache-directives <directive>]
+                          [--account-manager-email <email>] [--limit <n>]
                           [--offset <n>] [--report-range <scope>] [--all]
 cdnpro service-quota get|update
 ```
@@ -601,7 +626,7 @@ cdnpro admin apicall list [--from <date>] [--to <date>]
                           [--limit <n>] [--report-range <scope>] [--all]
 cdnpro admin apicall counts [--from <date>] [--to <date>]
                             [--path <prefix>] [--by-me-only]
-cdnpro admin apicall get
+cdnpro admin apicall get <id>
 ```
 
 ### Schema Introspection
@@ -731,7 +756,7 @@ npm install /path/to/CDNPro-CLI
 import { CDNProClient } from 'cdnpro-cli';
 
 const client = new CDNProClient({
-  host: 'api.cdnetworks.com',
+  host: 'ngapi.cdnetworks.com',
   user: 'your-username',
   secretKey: 'your-secret-key',
 });
@@ -739,21 +764,30 @@ const client = new CDNProClient({
 // List properties
 const properties = await client.properties.list();
 
-// Create a deployment
-const task = await client.deployments.create({
-  target: 'production',
-  actions: [
-    { action: 'deploy_property', propertyId: 'abc123', version: '2' },
-  ],
-});
+// Create a deployment. The new task's ID is returned in the Location header, so ask
+// for the raw response ({ obj, ctx }) to read it.
+const rsp = (await client.deployments.create(
+  {
+    target: 'production',
+    actions: [{ action: 'deploy_property', propertyId: 'abc123', version: '2' }],
+  },
+  { raw: true },
+)) as {
+  obj: { id?: string } | null;
+  ctx: { _res: { headers: Record<string, string | string[] | undefined> } };
+};
+const location = rsp.ctx._res.headers['location'];
+const taskId = rsp.obj?.id ?? String(location).split('/').pop()!;
 
 // Poll for completion
-let result = await client.deployments.get(task.id);
+let result = (await client.deployments.get(taskId)) as { status: string };
 while (result.status !== 'succeeded' && result.status !== 'failed') {
   await new Promise(r => setTimeout(r, 30_000));
-  result = await client.deployments.get(task.id);
+  result = (await client.deployments.get(taskId)) as { status: string };
 }
 ```
+
+Path IDs you pass to the client are URL-encoded, and empty values and `.`/`..` are rejected.
 
 ## OpenAPI Spec (`openapi.json`)
 
@@ -783,7 +817,7 @@ The spec is loaded once and cached in memory the first time any schema function 
   - The `github.com/.../blob/...` page is deliberately **not** used as a source: it has an ETag, but for the HTML page rather than the file, and it contains no file body (the spec is too large for GitHub to render).
   - Unauthenticated, the API allows 60 requests/hour per IP (304 responses count too). Set `GITHUB_TOKEN` (or `GH_TOKEN`) to raise that; it is sent to `api.github.com` only, and is retried without the token if GitHub rejects it with 401.
 - If the check or download fails and `openapi.json` already exists, the existing copy is kept (with a warning), so offline builds still work. If it does not exist, the build stops with an error.
-- `npm pack` / `npm publish` run a `prepack` hook that fetches the spec first, so the package always contains a current `openapi.json`. If the spec is missing and cannot be downloaded, packing aborts instead of producing a broken package. (`prepack` does not run `npm run build`; build before publishing so `dist/` is up to date.)
+- `npm pack` / `npm publish` run a `prepack` hook that runs the full build (fetch the spec, regenerate types, clean `dist/`, compile), so the package always contains a current `openapi.json` and a `dist/` that matches the sources, with no leftovers from deleted files. If the spec is missing and cannot be downloaded, packing aborts instead of producing a broken package. `npm run build` and `npm test` also clean `dist/` first.
 - The source follows the `master` branch, so every build picks up the latest published spec. To use a different location, set `OPENAPI_SPEC_URL` (a `github.com/.../blob/...` page URL is accepted and converted to the raw URL automatically).
 - `src/types/api.ts` is still committed and is regenerated on every build, so it will show up as modified after a build that picked up a newer spec.
 
@@ -797,7 +831,7 @@ The spec is loaded once and cached in memory the first time any schema function 
 2. **Rebuild** — run `npm run build` so `dist/` is compiled against the updated spec.
 3. **Update `OPERATION_MAP`** if you added or removed endpoints — open `src/schema/query.ts` and add/remove entries so the new operations are reachable via `cdnpro schema` and `--example`.
 4. **Add `OptionMapping[]`** for any new command — each command file exports its CLI flags as an `OptionMapping[]` array and calls `registerMappings()` so `cdnpro schema` can annotate parameters with `cliFlag` and `bodyCliFlags`. Use shared presets (`PAGINATION_OPTIONS`, `SORT_OPTIONS`, `FILE_EXAMPLE`, `CONFIRM`, etc.) from `src/cli/option-map.ts`.
-5. **Run tests** — run `npm test` to catch any type errors or broken validations introduced by the spec change.
+5. **Run tests** — run `npm test`. It compiles first (`tsc`, so type errors fail the run) and then executes the compiled tests, which also audit every flag mapping against the spec.
 
 ## Development
 
@@ -815,7 +849,7 @@ npm run update:spec
 # Build
 npm run build
 
-# Run tests
+# Run tests (compiles first, then runs the compiled tests)
 npm test
 ```
 

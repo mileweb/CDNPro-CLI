@@ -1,5 +1,6 @@
 import chalk from 'chalk';
 import Table from 'cli-table3';
+import { sanitizeForTerminal } from './sanitize';
 
 export type OutputFormat = 'table' | 'json' | 'jsonl';
 
@@ -103,7 +104,9 @@ export function printWriteResult(
   if (!process.stdout.isTTY || format) {
     process.stdout.write(writeResultData(fields) + '\n');
   } else if (humanMessage) {
-    process.stderr.write(humanMessage.endsWith('\n') ? humanMessage : humanMessage + '\n');
+    // humanMessage often embeds IDs taken from the server's Location header.
+    const text = sanitizeForTerminal(humanMessage);
+    process.stderr.write(text.endsWith('\n') ? text : text + '\n');
   }
 }
 
@@ -140,13 +143,24 @@ export function printTable(data: unknown, columns?: string[]): void {
       process.stdout.write(table.toString() + '\n');
       return;
     }
-    const allKeys = Object.keys(data[0] as Record<string, unknown>);
-    const cols = columns ?? allKeys.filter(k => {
-      const v = (data[0] as Record<string, unknown>)[k];
-      return !(v !== null && typeof v === 'object' && !Array.isArray(v));
-    });
+    // Rows can have different keys (optional properties), so take the union in
+    // first-seen order rather than only the first row's keys. A key is skipped only
+    // when every row that has it holds a nested object, which does not fit a table
+    // cell. A column that is null everywhere is still shown (as "-").
+    const rows = data.filter((r) => r !== null && typeof r === 'object') as Array<Record<string, unknown>>;
+    const isNested = (v: unknown) => v !== null && typeof v === 'object' && !Array.isArray(v);
+    const allKeys: string[] = [];
+    const seen = new Set<string>();
+    for (const r of rows) {
+      for (const k of Object.keys(r)) {
+        if (!seen.has(k)) { seen.add(k); allKeys.push(k); }
+      }
+    }
+    const cols = columns ?? allKeys.filter((k) =>
+      rows.some((r) => k in r && !isNested(r[k])),
+    );
     const table = new Table({
-      head: cols.map((c) => chalk.bold(c)),
+      head: cols.map((c) => chalk.bold(sanitizeForTerminal(c))),
       style: { head: [], border: [] },
     });
     for (const row of data) {
@@ -161,20 +175,21 @@ export function printTable(data: unknown, columns?: string[]): void {
     const obj = data as Record<string, unknown>;
     const table = new Table({ style: { head: [], border: [] } });
     for (const [k, v] of Object.entries(obj)) {
-      table.push({ [chalk.bold(k)]: formatCell(v) });
+      table.push({ [chalk.bold(sanitizeForTerminal(k))]: formatCell(v) });
     }
     process.stdout.write(table.toString() + '\n');
     return;
   }
 
   // Scalar or null — just print it
-  process.stdout.write(String(data) + '\n');
+  process.stdout.write(sanitizeForTerminal(String(data)) + '\n');
 }
 
 function formatCell(value: unknown): string {
   if (value === null || value === undefined) return chalk.dim('-');
+  // JSON.stringify already escapes control characters.
   if (typeof value === 'object') return JSON.stringify(value);
-  return String(value);
+  return sanitizeForTerminal(String(value));
 }
 
 interface RawResponseLike {

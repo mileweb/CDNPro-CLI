@@ -312,6 +312,32 @@ function emitOptionViolations(
   throw new CliError('VALIDATION', message, undefined, true);
 }
 
+/**
+ * `--file` supplies the entire request body, so any flag that would also build
+ * body content is a conflict. Silently preferring the file would drop the
+ * caller's flags without a trace (e.g. `purge create --file p.json --url ...`
+ * purging only what the file lists). Query/header flags are unaffected.
+ */
+export function checkFileConflicts(opts: object, mappings: OptionMapping[]): void {
+  const values = opts as Record<string, unknown>;
+  if (!values['file']) return;
+  const conflicting = mappings
+    .filter((m) => m.target === 'body' && m.param !== null)
+    .filter((m) => {
+      const val = values[flagToAttr(m.flag)];
+      if (val === undefined || val === null || val === '' || val === false) return false;
+      return !(Array.isArray(val) && val.length === 0);
+    })
+    .map((m) => flagToCliFlag(m.flag));
+  if (conflicting.length > 0) {
+    throw new CliError(
+      'VALIDATION',
+      `--file supplies the whole request body and cannot be combined with ${conflicting.join(', ')}`,
+      { cliFlag: '--file', conflictsWith: conflicting },
+    );
+  }
+}
+
 /** Validate required options from mappings. */
 export function checkRequiredMappings(
   opts: Record<string, unknown>,

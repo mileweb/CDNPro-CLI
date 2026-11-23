@@ -46,7 +46,7 @@ export function registerIpDetailsCommands(parent: Command): void {
 
       const body = readBodyFile(opts.file as string);
       const validation = validateBody('/ngadmin/ipDetails', 'post', body);
-      if (!validation.valid) emitValidationError(validation, 'cdnpro schema ip-details lookup', globals.output);
+      if (!validation.valid) emitValidationError(validation, 'cdnpro ip-details lookup --example', globals.output);
 
       const reqOptions = {
         ...(globals.verbose ? { verbose: globals.verbose } : {}),
