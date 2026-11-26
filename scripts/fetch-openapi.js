@@ -2,119 +2,88 @@
 'use strict';
 
 /**
- * Downloads the CDN Pro OpenAPI spec to <repo>/openapi.json.
+ * Installs the CDN Pro OpenAPI spec at the exact revision pinned by
+ * openapi.lock.json, or verifies that the local copy matches it.
  *
- * The spec is not committed to this repo. It is fetched at build time from the
- * docs-content-cdn repo (the single source of truth) and git-ignored.
- *
- * Sources, tried in order (the one that produced the current file goes first):
- *   1. raw.githubusercontent.com            (primary)
- *   2. api.github.com contents API          (failover, same file via the raw media type)
- * If a source is unreachable, times out, errors, or returns something that is not an
- * OpenAPI document, the next one is tried.
- *   Not used: the github.com ".../blob/..." page. It does return an ETag, but for the
- *   HTML page, not the file, and it contains no file body (too large for GitHub to
- *   render), so it cannot supply the spec. ".../raw/..." just redirects to source 1.
- *
- * ETag: the server's ETag is saved next to the spec (openapi.json.etag, git-ignored)
- * together with the URL it came from, and sent back as If-None-Match on later runs, so
- * the file is only re-downloaded when it changed upstream (HTTP 304 = still up to date).
- * ETags are source-specific (weak per-encoding on raw; the git blob SHA on the API), so
- * a saved ETag is only ever sent to the source that issued it.
+ * The spec is not committed. openapi.lock.json records the docs-content-cdn
+ * commit, its sha256, and the spec's shape, so every build uses the same
+ * spec (the one the CLI code was verified against) until someone deliberately
+ * advances the pin with `npm run spec:update`.
  *
  * Usage:
- *   node scripts/fetch-openapi.js            download if missing, or if upstream changed (ETag)
- *   node scripts/fetch-openapi.js --force    always re-download, ignoring the saved ETag
+ *   node scripts/fetch-openapi.js              install the locked spec
+ *   node scripts/fetch-openapi.js --force      re-download even if the hash matches
+ *   node scripts/fetch-openapi.js --check      offline: does openapi.json match the lock?
+ *   node scripts/fetch-openapi.js --check --release
+ *                                              compare the lock with live master (warn-only;
+ *                                              used by prepublishOnly). Add --strict to fail.
+ *
+ * Downloads try raw.githubusercontent.com first, then api.github.com (raw media
+ * type). The URL is the pinned commit, so the content is immutable; the sha256
+ * in the lock is the integrity check. When the local file already matches the
+ * lock, no network request is made.
  *
  * Environment:
- *   OPENAPI_SPEC_URL   override the primary source. Both raw.githubusercontent.com URLs and
- *                      github.com/<owner>/<repo>/blob/<ref>/<path> URLs are accepted
- *                      (the latter is rewritten to the raw form). The api.github.com
- *                      failover is derived from it when it is a GitHub URL (the ref must be
- *                      a single path segment, e.g. "master").
- *   GITHUB_TOKEN       (or GH_TOKEN) optional. Sent to api.github.com only, to lift the
- *                      60 requests/hour unauthenticated limit (304 responses count too).
+ *   OPENAPI_SPEC_URL   legacy, unpinned escape hatch. Bypasses the lock (warned);
+ *                      keeps the old ETag/304 behavior. Cannot be combined with
+ *                      --check or --release.
+ *   GITHUB_TOKEN       (or GH_TOKEN) optional; lifts the api.github.com rate limit.
  *
- * Failure behaviour (after every source has failed):
- *   - openapi.json already exists  -> warn and keep the existing copy (exit 0)
- *   - openapi.json does not exist  -> print a clear error and exit 1
+ * Exit codes: 0 success; 1 missing/mismatched spec, network failure, or lock
+ * mismatch; 2 usage error.
  */
 
 const fs = require('fs');
 const path = require('path');
 
-const DEFAULT_URL =
-  'https://raw.githubusercontent.com/mileweb/docs-content-cdn/master/en/apispec/openapi.json';
+const {
+  SPEC_FILE,
+  LOCK_FILE,
+  SpecError,
+  readLock,
+  sha256File,
+  writeAtomic,
+  shortSha,
+  describeError,
+} = require('./lib/spec-common');
+const {
+  toRawUrl,
+  buildSources,
+  fetchFromSources,
+  downloadSpec,
+  resolveDocsRef,
+} = require('./lib/spec-source');
+
+const ETAG_FILE = `${SPEC_FILE}.etag`;
 const DOWNLOAD_TIMEOUT_MS = 30_000;
 // When we already have a copy, an update check must never stall a build for long.
 const CHECK_TIMEOUT_MS = 10_000;
-const USER_AGENT = 'cdnpro-cli-fetch-openapi';
 
-const dest = path.join(__dirname, '..', 'openapi.json');
-const etagFile = `${dest}.etag`;
-const force = process.argv.includes('--force');
+const args = process.argv.slice(2);
+const force = args.includes('--force');
+const check = args.includes('--check');
+const release = args.includes('--release');
+const strict = args.includes('--strict');
+
 const log = (msg) => console.log(`[fetch-openapi] ${msg}`);
+const warn = (msg) => console.warn(`[fetch-openapi] warning: ${msg}`);
+function fail(message, code = 1) {
+  console.error(`[fetch-openapi] error: ${message}`);
+  process.exit(code);
+}
 
-/** Turn a github.com "blob" page URL into the raw-content URL; leave anything else alone. */
-function toRawUrl(url) {
-  const m = url.match(/^https:\/\/github\.com\/([^/]+)\/([^/]+)\/blob\/(.+)$/);
-  return m ? `https://raw.githubusercontent.com/${m[1]}/${m[2]}/${m[3]}` : url;
+function removeEtag() {
+  fs.rmSync(ETAG_FILE, { force: true });
 }
 
 /**
- * The ordered list of places to try. Always the primary; plus the GitHub API when the
- * primary is a raw.githubusercontent.com URL we can translate.
- */
-function buildSources(primaryUrl) {
-  const sources = [
-    {
-      name: new URL(primaryUrl).host,
-      url: primaryUrl,
-      headers: { Accept: 'application/json', 'User-Agent': USER_AGENT },
-    },
-  ];
-
-  const m = primaryUrl.match(/^https:\/\/raw\.githubusercontent\.com\/([^/]+)\/([^/]+)\/([^/]+)\/(.+)$/);
-  if (m) {
-    const [, owner, repo, ref, filePath] = m;
-    const headers = {
-      // The raw media type returns the file itself (up to 100 MB), not the JSON wrapper.
-      Accept: 'application/vnd.github.raw+json',
-      'X-GitHub-Api-Version': '2022-11-28',
-      'User-Agent': USER_AGENT,
-    };
-    const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
-    if (token) headers.Authorization = `Bearer ${token}`;
-    sources.push({
-      name: 'api.github.com',
-      url: `https://api.github.com/repos/${owner}/${repo}/contents/${filePath}?ref=${encodeURIComponent(ref)}`,
-      headers,
-    });
-  }
-  return sources;
-}
-
-function describe(err) {
-  const cause = err && err.cause && (err.cause.code || err.cause.message);
-  const base = err && err.name === 'TimeoutError' ? 'timed out' : err && err.message ? err.message : String(err);
-  return cause ? `${base} (${cause})` : String(base);
-}
-
-/** Write via a temp file so an interrupted run never leaves a half-written file behind. */
-function writeAtomic(file, contents) {
-  const tmp = `${file}.tmp`;
-  fs.writeFileSync(tmp, contents);
-  fs.renameSync(tmp, file);
-}
-
-/**
- * The saved { url, etag } record, or null if there is none / it is unreadable / the spec
- * file itself is missing (an ETag is meaningless without the file it describes).
+ * The saved { url, etag } record, or null if there is none / it is unreadable /
+ * the spec file itself is missing. Used only by legacy OPENAPI_SPEC_URL mode.
  */
 function readSavedRecord() {
-  if (!fs.existsSync(dest) || !fs.existsSync(etagFile)) return null;
+  if (!fs.existsSync(SPEC_FILE) || !fs.existsSync(ETAG_FILE)) return null;
   try {
-    const saved = JSON.parse(fs.readFileSync(etagFile, 'utf8'));
+    const saved = JSON.parse(fs.readFileSync(ETAG_FILE, 'utf8'));
     return saved && typeof saved.url === 'string' && typeof saved.etag === 'string' && saved.etag ? saved : null;
   } catch {
     return null; // corrupt sidecar: just do a full download
@@ -123,121 +92,189 @@ function readSavedRecord() {
 
 function saveRecord(url, etag) {
   if (etag) {
-    writeAtomic(etagFile, JSON.stringify({ url, etag }) + '\n');
+    writeAtomic(ETAG_FILE, JSON.stringify({ url, etag }) + '\n');
   } else {
-    fs.rmSync(etagFile, { force: true }); // server sent no ETag: don't keep a stale one
+    fs.rmSync(ETAG_FILE, { force: true }); // server sent no ETag: don't keep a stale one
   }
 }
 
-/**
- * Fetches one source. Resolves to { notModified: true } on HTTP 304, otherwise
- * { text, spec, etag } for a validated OpenAPI document. Rejects on anything else.
- */
-async function download(source, etag) {
-  if (typeof fetch !== 'function') {
-    throw new Error(`global fetch() is not available in Node ${process.version}; Node 18+ is required`);
-  }
-  const headers = { ...source.headers };
-  if (etag) headers['If-None-Match'] = etag;
-
-  const res = await fetch(source.url, {
-    headers,
-    signal: AbortSignal.timeout(fs.existsSync(dest) ? CHECK_TIMEOUT_MS : DOWNLOAD_TIMEOUT_MS),
-  });
-  if (res.status === 304) return { notModified: true };
-  if (res.status === 401 && headers.Authorization) {
-    // A stale/revoked GITHUB_TOKEN in the environment must not break an otherwise-working
-    // anonymous request: retry once without credentials.
-    log(`${source.name} rejected the token (HTTP 401); retrying without it`);
-    const { Authorization, ...anonymous } = source.headers;
-    return download({ ...source, headers: anonymous }, etag);
-  }
-  if (!res.ok) {
-    if ((res.status === 403 || res.status === 429) && res.headers.get('x-ratelimit-remaining') === '0') {
-      throw new Error(`HTTP ${res.status}: rate limit exceeded (set GITHUB_TOKEN to raise it)`);
-    }
-    throw new Error(`HTTP ${res.status} ${res.statusText}`.trim());
-  }
-
-  const text = await res.text();
-  let spec;
-  try {
-    spec = JSON.parse(text);
-  } catch {
-    // e.g. a captive portal / proxy error page served with HTTP 200, or a truncated body
-    const looksHtml = /^\s*</.test(text);
-    throw new Error(`response is not valid JSON${looksHtml ? ' (looks like an HTML page, e.g. a captive portal or proxy)' : ''}`);
-  }
-  if (!spec || typeof spec !== 'object' || typeof spec.paths !== 'object') {
-    throw new Error('response is not an OpenAPI document (no "paths" object)');
-  }
-  return { text, spec, etag: res.headers.get('etag') };
-}
-
-function countOperations(spec) {
-  const verbs = ['get', 'put', 'post', 'delete', 'patch', 'head', 'options'];
-  return Object.values(spec.paths).reduce(
-    (n, item) => n + verbs.filter((v) => item && item[v]).length,
-    0,
-  );
-}
-
-async function main() {
-  const primaryUrl = toRawUrl(process.env.OPENAPI_SPEC_URL || DEFAULT_URL);
+async function legacyFetch(primaryUrl) {
   const saved = force ? null : readSavedRecord();
 
-  // Try the source that produced the current file first: its ETag is the only one that can
-  // yield a cheap 304, and it avoids waiting on a primary that is known to be unreachable.
+  // Try the source that produced the current file first: its ETag is the only one
+  // that can yield a cheap 304, and it avoids waiting on a primary known to be down.
   const sources = buildSources(primaryUrl).sort(
     (a, b) => Number(Boolean(saved) && b.url === saved.url) - Number(Boolean(saved) && a.url === saved.url),
   );
 
-  const failures = [];
-  for (const source of sources) {
-    const etag = saved && saved.url === source.url ? saved.etag : null;
-    log(`${etag ? 'checking for updates' : 'downloading'} via ${source.name}: ${source.url}`);
+  try {
+    const result = await fetchFromSources(sources, {
+      etag: saved ? saved.etag : undefined,
+      etagUrl: saved ? saved.url : undefined,
+      timeoutMs: fs.existsSync(SPEC_FILE) ? CHECK_TIMEOUT_MS : DOWNLOAD_TIMEOUT_MS,
+    });
 
-    try {
-      const result = await download(source, etag);
-
-      if (result.notModified) {
-        log(`openapi.json is up to date (ETag unchanged, via ${source.name}).`);
-        return;
-      }
-
-      const { text, spec } = result;
-      writeAtomic(dest, text);
-      saveRecord(source.url, result.etag);
-      log(
-        `${etag ? 'updated' : 'saved'} openapi.json via ${source.name} ` +
-          `(${(Buffer.byteLength(text) / 1024).toFixed(0)} KB, ` +
-          `${Object.keys(spec.paths).length} paths, ${countOperations(spec)} operations)`,
-      );
+    if (result.notModified) {
+      log(`openapi.json is up to date (ETag unchanged, via ${result.source.name}).`);
       return;
-    } catch (err) {
-      failures.push({ source, reason: describe(err) });
-      const next = sources[sources.indexOf(source) + 1];
-      console.warn(
-        `[fetch-openapi] ${source.name} failed: ${describe(err)}` +
-          (next ? `; failing over to ${next.name}` : ''),
-      );
     }
-  }
 
-  const summary = failures.map((f) => `  - ${f.source.name}: ${f.reason}`).join('\n');
-  if (fs.existsSync(dest)) {
-    console.warn(
-      `[fetch-openapi] warning: could not refresh the spec from any source; keeping the existing openapi.json.\n${summary}`,
+    writeAtomic(SPEC_FILE, result.buffer);
+    saveRecord(result.source.url, result.etag);
+    log(
+      `${saved ? 'updated' : 'saved'} openapi.json via ${result.source.name} ` +
+        `(${(result.buffer.length / 1024).toFixed(0)} KB, ` +
+        `${result.stats.paths} paths, ${result.stats.operations} operations)`,
     );
-    return;
+  } catch (err) {
+    if (fs.existsSync(SPEC_FILE)) {
+      warn(`could not refresh the spec; keeping the existing openapi.json.\n  ${describeError(err)}`);
+      return;
+    }
+    fail(
+      `could not download the OpenAPI spec.\n  ${describeError(err)}\n` +
+        `  Fix your network/proxy and retry, or download the file manually to ${SPEC_FILE},\n` +
+        `  or point OPENAPI_SPEC_URL at another location.`,
+    );
   }
-  console.error(
-    `[fetch-openapi] error: could not download the OpenAPI spec from any source.\n${summary}\n\n` +
-      `  The build needs ${dest}.\n` +
-      `  Fix your network/proxy and retry, or download the file manually to that path,\n` +
-      `  or point OPENAPI_SPEC_URL at another location.`,
-  );
-  process.exit(1);
 }
 
-main();
+function localCheck(lock) {
+  if (!fs.existsSync(SPEC_FILE)) {
+    fail('openapi.json is missing. Run "npm run fetch:spec" to install the locked spec.');
+  }
+  const actual = sha256File(SPEC_FILE);
+  if (actual !== lock.spec.sha256) {
+    fail(
+      'openapi.json does not match the lock.\n' +
+        `  expected ${lock.spec.sha256}\n` +
+        `  actual   ${actual}\n` +
+        '  Run "npm run fetch:spec -- --force" to reinstall the pinned spec, or restore the intended lock.',
+    );
+  }
+  log(`openapi.json matches lock (${shortSha(lock.source.commit)}, sha256 ${actual.slice(0, 12)}…).`);
+}
+
+async function releaseCheck(lock) {
+  log('checking the lock against live master…');
+
+  let master;
+  try {
+    const resolved = await resolveDocsRef('master', { repo: lock.source.repo });
+    const downloaded = await downloadSpec({
+      repo: lock.source.repo,
+      commit: resolved.commit,
+      specPath: lock.source.path,
+      timeoutMs: DOWNLOAD_TIMEOUT_MS,
+    });
+    master = { ...downloaded, commit: resolved.commit };
+  } catch (err) {
+    warn(`could not verify the lock against live master: ${describeError(err)}`);
+    if (strict) process.exit(1);
+    return;
+  }
+
+  if (master.sha256 === lock.spec.sha256) {
+    log(`lock matches live master (${shortSha(master.commit)}).`);
+    return;
+  }
+
+  const ref = lock.source.ref ? ` (lock ref: ${lock.source.ref})` : '';
+  const advice =
+    lock.source.ref && lock.source.ref !== 'master'
+      ? '  This is a non-production pin. Do not publish it before the API reaches production.\n' +
+        '  After the API ships, re-pin with "npm run spec:update -- --from master".'
+      : lock.source.ref === 'master'
+        ? '  The lock is behind master. Re-pin with "npm run spec:update -- --from master" before publishing.'
+        : '  Re-pin from master with "npm run spec:update -- --from master" before publishing.';
+  warn(
+    `the lock does not match live master${ref}.\n` +
+      `  lock:   ${lock.source.commit}  sha256 ${lock.spec.sha256.slice(0, 12)}…\n` +
+      `  master: ${master.commit}  sha256 ${master.sha256.slice(0, 12)}…\n` +
+      advice,
+  );
+  if (strict) process.exit(1);
+}
+
+async function install(lock) {
+  const { commit } = lock.source;
+
+  if (fs.existsSync(SPEC_FILE) && !force) {
+    const actual = sha256File(SPEC_FILE);
+    if (actual === lock.spec.sha256) {
+      log(`openapi.json is up to date (lock ${shortSha(commit)}, sha256 ${actual.slice(0, 12)}…).`);
+      removeEtag();
+      return;
+    }
+    warn(
+      `local openapi.json does not match the lock ` +
+        `(${actual.slice(0, 12)}… != ${lock.spec.sha256.slice(0, 12)}…); reinstalling.`,
+    );
+  }
+
+  log(`downloading pinned spec at ${shortSha(commit)}…`);
+
+  let result;
+  try {
+    result = await downloadSpec({
+      repo: lock.source.repo,
+      commit,
+      specPath: lock.source.path,
+      timeoutMs: DOWNLOAD_TIMEOUT_MS,
+    });
+  } catch (err) {
+    fail(
+      `could not download the pinned spec.\n  ${describeError(err)}\n` +
+        `  The lock pins ${commit}.\n` +
+        '  Fix your network/proxy and retry, or set OPENAPI_SPEC_URL to override (unpinned, warned).',
+    );
+  }
+
+  if (result.sha256 !== lock.spec.sha256) {
+    fail(
+      'downloaded spec does not match the lock.\n' +
+        `  expected ${lock.spec.sha256}\n` +
+        `  actual   ${result.sha256}\n` +
+        '  Refusing to write a tampered or corrupted spec.',
+    );
+  }
+
+  writeAtomic(SPEC_FILE, result.buffer);
+  removeEtag();
+  log(
+    `saved openapi.json at ${shortSha(commit)} ` +
+      `(${(result.buffer.length / 1024).toFixed(0)} KB, ` +
+      `${result.stats.paths} paths, ${result.stats.operations} operations, ` +
+      `sha256 ${result.sha256.slice(0, 12)}…).`,
+  );
+}
+
+async function main() {
+  if (release && !check) fail('--release is only valid together with --check', 2);
+  if (strict && !release) fail('--strict is only valid together with --check --release', 2);
+
+  const overrideUrl = process.env.OPENAPI_SPEC_URL;
+  if (overrideUrl) {
+    warn(`OPENAPI_SPEC_URL bypasses ${path.basename(LOCK_FILE)}; the build will not be pinned.`);
+    if (check || release) {
+      fail('--check/--release require the lock; unset OPENAPI_SPEC_URL to use them.', 2);
+    }
+    return legacyFetch(toRawUrl(overrideUrl));
+  }
+
+  let lock;
+  try {
+    lock = readLock();
+  } catch (err) {
+    fail(`${describeError(err)}\n  Restore openapi.lock.json from git, or run "npm run spec:update".`);
+  }
+
+  if (release) return releaseCheck(lock);
+  if (check) return localCheck(lock);
+  return install(lock);
+}
+
+main().catch((err) => {
+  if (err instanceof SpecError) fail(err.message, err.exitCode);
+  fail(describeError(err));
+});

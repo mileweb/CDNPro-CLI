@@ -6,3 +6,4 @@ docs/internal/
 /openapi.json
 /openapi.json.tmp
 /openapi.json.etag
+/openapi.lock.json.tmp

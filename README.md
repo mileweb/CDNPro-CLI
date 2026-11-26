@@ -117,8 +117,6 @@ incidental exposure, but it cannot hide a payload from a caller running under th
   variable populated from your CI's secret store. Environment variables are less exposed than argv,
   but a same-user process can still read `/proc/<pid>/environ`. Secrets inside request bodies belong
   in `--file -` / a restricted file, as above.
-- `secret get` prints the stored secret text and `webhook get` prints `credentials.secretKey`, exactly
-  as the API returns them. Treat that output (and anything it is piped or logged to) as sensitive.
 - `-v`/`-vv` diagnostics go to **stderr**, so they never corrupt piped JSON. `-vv` redacts the
   `Authorization` header and sensitive body fields (`privateKey`, `secret`, `secretKey`, `apiKey`,
   passwords, tokens, PEM private keys). Redaction is best-effort — still treat logs as sensitive.
@@ -791,7 +789,7 @@ Path IDs you pass to the client are URL-encoded, and empty values and `.`/`..` a
 
 ## OpenAPI Spec (`openapi.json`)
 
-The CDN Pro API contract lives in the [docs-content-cdn](https://github.com/mileweb/docs-content-cdn/blob/master/en/apispec/openapi.json) repo (`en/apispec/openapi.json`, `master` branch). It is **not committed to this repo**: `scripts/fetch-openapi.js` downloads it to `openapi.json` in the repo root (git-ignored) and saves the server's ETag next to it (`openapi.json.etag`, also git-ignored). On later builds it sends that ETag back, so the file is only re-downloaded when it has changed upstream. It drives several layers of the CLI:
+The CDN Pro API contract lives in the [docs-content-cdn](https://github.com/mileweb/docs-content-cdn/blob/master/en/apispec/openapi.json) repo (`en/apispec/openapi.json`). It is **not committed to this repo**. Instead, `openapi.lock.json` pins the exact docs commit, its sha256, and the spec's shape. `scripts/fetch-openapi.js` installs exactly that revision into `openapi.json` (git-ignored), so every build uses the same spec the code was verified against until someone deliberately advances the pin. The spec drives several layers of the CLI:
 
 | Consumer | How | Where |
 |---|---|---|
@@ -801,6 +799,7 @@ The CDN Pro API contract lives in the [docs-content-cdn](https://github.com/mile
 | **Schema introspection** | `src/cli/commands/schema.ts` reads the spec directly to show request/response details for `cdnpro schema <resource> <operation>` | `cdnpro schema` command |
 | **CLI flag → API parameter mapping** | Each command file exports an `OptionMapping[]` array that maps CLI flags to their API targets (query params, headers, body properties). `registerMappings()` stores this for schema introspection; `registerOptionsFromMapping()` registers Commander options from the same source. | `src/cli/option-map.ts` + every command file |
 | **Packaged artifact** | `dist/` loads the spec at runtime with `require('../../openapi.json')` (it is **not** embedded in `dist/`), so the downloaded file must sit at the package root. `package.json` `files` lists it, so it ships in the published package | `npm pack` / `npm publish` |
+| **Baseline pin** | `openapi.lock.json` records the docs commit and sha256; the fetch script installs exactly that revision and verifies its hash | `openapi.lock.json` |
 
 The spec is loaded once and cached in memory the first time any schema function is called; subsequent calls within the same process reuse the cached object.
 
@@ -808,18 +807,20 @@ The spec is loaded once and cached in memory the first time any schema function 
 
 | Command | What it does |
 |---|---|
-| `npm run build` / `npm run dev` | Fetches the spec if it is missing or changed upstream (conditional request using the saved ETag), then builds. Needs network access the first time. |
-| `npm run fetch:spec` | Just the fetch step. |
-| `npm run update:spec` | Forces an unconditional re-download (ignores the saved ETag), then regenerates `src/types/api.ts`. |
+| `npm run build` / `npm run dev` | Installs the locked spec if needed, regenerates types, then builds. No network when `openapi.json` already matches the lock. |
+| `npm run fetch:spec` | Install the locked spec (no network if the hash matches; hash-verified otherwise). |
+| `npm run fetch:spec -- --force` | Re-download the locked spec even when the local copy already matches. |
+| `npm run spec:check` | Offline: verify `openapi.json` matches `openapi.lock.json`. |
+| `npm run spec:check -- --release` | Compare the lock with live `master` and warn if the lock was not produced from `master`. Also runs on `npm publish` (`prepublishOnly`). |
+| `npm run spec:diff -- --from dev` | Enumerate spec changes with oasdiff against the pinned baseline. See [docs/spec-drift.md](docs/spec-drift.md). |
+| `npm run spec:update -- --from <ref>` | Advance the pin: download, verify, write `openapi.json` and `openapi.lock.json`, then regenerate `src/types/api.ts`. Add `--dry-run` to print the lock without writing. |
 
-- An unchanged spec costs one small request that returns `304 Not Modified`; nothing is downloaded or rewritten. The saved ETag is ignored if it was recorded for a different URL or if `openapi.json` is missing.
-- **Failover:** the spec is fetched from `raw.githubusercontent.com` first. If that is unreachable, times out (10 s when you already have a copy, 30 s otherwise), returns an error, or returns something that is not an OpenAPI document (e.g. a captive-portal page), the script fails over to the GitHub contents API (`api.github.com`), which serves the same file and also supports ETags (its ETag is the file's git blob SHA). Each source has its own ETag, so a saved ETag is only sent to the source that issued it, and the source that produced your current file is tried first (a known-unreachable primary doesn't slow every build). The log line says which source was used.
-  - The `github.com/.../blob/...` page is deliberately **not** used as a source: it has an ETag, but for the HTML page rather than the file, and it contains no file body (the spec is too large for GitHub to render).
-  - Unauthenticated, the API allows 60 requests/hour per IP (304 responses count too). Set `GITHUB_TOKEN` (or `GH_TOKEN`) to raise that; it is sent to `api.github.com` only, and is retried without the token if GitHub rejects it with 401.
-- If the check or download fails and `openapi.json` already exists, the existing copy is kept (with a warning), so offline builds still work. If it does not exist, the build stops with an error.
-- `npm pack` / `npm publish` run a `prepack` hook that runs the full build (fetch the spec, regenerate types, clean `dist/`, compile), so the package always contains a current `openapi.json` and a `dist/` that matches the sources, with no leftovers from deleted files. If the spec is missing and cannot be downloaded, packing aborts instead of producing a broken package. `npm run build` and `npm test` also clean `dist/` first.
-- The source follows the `master` branch, so every build picks up the latest published spec. To use a different location, set `OPENAPI_SPEC_URL` (a `github.com/.../blob/...` page URL is accepted and converted to the raw URL automatically).
-- `src/types/api.ts` is still committed and is regenerated on every build, so it will show up as modified after a build that picked up a newer spec.
+- Downloads try `raw.githubusercontent.com` first, then the GitHub contents API (`api.github.com`). The URL is an immutable docs commit, so the lock's sha256 is the integrity check; a mismatch is refused rather than written.
+- When `openapi.json` already matches the lock, no network request is made. If it is missing or mismatched and cannot be downloaded, the build fails instead of using an unverified file.
+- Set `GITHUB_TOKEN` (or `GH_TOKEN`) to raise the `api.github.com` rate limit; it is also used when resolving branch names to commit SHAs.
+- `OPENAPI_SPEC_URL` is still available as a warned, unpinned escape hatch. It bypasses the lock and cannot be combined with `--check`/`--release`.
+- `npm pack` / `npm publish` run `prepack` (full build) and `prepublishOnly` (release check). The release check is warn-only so a GitHub outage does not block a publish; `npm run spec:check -- --release --strict` makes it a hard failure.
+- `src/types/api.ts` is committed and regenerated by `spec:update` (and by every build). Never edit it by hand.
 
 ### After the spec changes
 
@@ -827,11 +828,14 @@ The spec is loaded once and cached in memory the first time any schema function 
 
 **Contributors** working on the source must do the following before publishing a new release:
 
-1. **Refresh the spec and regenerate types** — run `npm run update:spec`. This re-downloads `openapi.json` and overwrites `src/types/api.ts`. Never edit that file by hand; it will be overwritten.
-2. **Rebuild** — run `npm run build` so `dist/` is compiled against the updated spec.
-3. **Update `OPERATION_MAP`** if you added or removed endpoints — open `src/schema/query.ts` and add/remove entries so the new operations are reachable via `cdnpro schema` and `--example`.
-4. **Add `OptionMapping[]`** for any new command — each command file exports its CLI flags as an `OptionMapping[]` array and calls `registerMappings()` so `cdnpro schema` can annotate parameters with `cliFlag` and `bodyCliFlags`. Use shared presets (`PAGINATION_OPTIONS`, `SORT_OPTIONS`, `FILE_EXAMPLE`, `CONFIRM`, etc.) from `src/cli/option-map.ts`.
-5. **Run tests** — run `npm test`. It compiles first (`tsc`, so type errors fail the run) and then executes the compiled tests, which also audit every flag mapping against the spec.
+1. **Enumerate and triage** — run `npm run spec:diff -- --from dev` and follow [docs/spec-drift.md](docs/spec-drift.md). oasdiff v1.41.0 is an external prerequisite (the guide lists install options). Fill in the ledger before editing code.
+2. **Implement code and tests** for each `flag-added` / `behavior-change` row.
+3. **Advance the pin and regenerate types** — run `npm run spec:update -- --from dev` (or `--from master` for production). Review `openapi.lock.json` and `src/types/api.ts`; never edit the types by hand.
+4. **Rebuild** — run `npm run build` so `dist/` is compiled against the pinned spec.
+5. **Update `OPERATION_MAP`** if you added or removed endpoints — open `src/schema/query.ts` and add/remove entries so the new operations are reachable via `cdnpro schema` and `--example`.
+6. **Add `OptionMapping[]`** for any new command — each command file exports its CLI flags as an `OptionMapping[]` array and calls `registerMappings()` so `cdnpro schema` can annotate parameters with `cliFlag` and `bodyCliFlags`. Use shared presets (`PAGINATION_OPTIONS`, `SORT_OPTIONS`, `FILE_EXAMPLE`, `CONFIRM`, etc.) from `src/cli/option-map.ts`.
+7. **Run tests** — run `npm test`. It compiles first (`tsc`, so type errors fail the run) and then executes the compiled tests, which also audit every flag mapping against the spec.
+8. **Release from a `master`-derived lock** — `npm publish` runs `spec:check --release` and warns if the lock's sha256 differs from live `master`. Do not publish a `dev`-pinned build before the API change is in production.
 
 ## Development
 
@@ -843,8 +847,10 @@ npm install
 npm run dev -- auth status
 npm run dev -- property list
 
-# Re-download openapi.json and regenerate TypeScript types
-npm run update:spec
+# Verify the pinned spec, enumerate drift, or advance the pin
+npm run spec:check
+npm run spec:diff -- --from dev
+npm run spec:update -- --from dev
 
 # Build
 npm run build

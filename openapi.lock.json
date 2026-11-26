@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "source": {
+    "repo": "mileweb/docs-content-cdn",
+    "path": "en/apispec/openapi.json",
+    "ref": "master",
+    "commit": "647ad2417e201d8fae8840307726fbf3fbf15000",
+    "commitDate": "2026-11-10T15:00:30+08:00",
+    "commitSubject": "Update docs for Release09Nov2026",
+    "url": "https://raw.githubusercontent.com/mileweb/docs-content-cdn/647ad2417e201d8fae8840307726fbf3fbf15000/en/apispec/openapi.json"
+  },
+  "spec": {
+    "sha256": "c95812a9edef5a3fdbdcb3942c1b291e163bfb3a073bf79cecc383c0a29cd326",
+    "bytes": 1906212,
+    "openapi": "3.0.0",
+    "paths": 86,
+    "operations": 143
+  }
+}
